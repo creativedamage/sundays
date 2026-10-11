@@ -733,7 +733,7 @@ async function byToken(table: "purchase_orders" | "work_orders" | "change_orders
 export const withToken = <T>(table: "purchase_orders" | "work_orders" | "change_orders", token: string, what: string, fn: (id: string) => Promise<T>) =>
   byToken(table, token, what).then(({ id, org }) => inOrg(org, () => fn(id)));
 
-async function letterhead() {
+export async function letterhead() {
   const biz = await getAvl();
   const [org] = await sql`select name from ops.organization`;
   const addr = [biz.addressLine1, biz.addressLine2, [biz.city, biz.state, biz.postalCode].filter(Boolean).join(", ")].filter(Boolean).join(", ");

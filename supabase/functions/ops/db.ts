@@ -85,7 +85,7 @@ export class HttpError extends Error {
 }
 
 /** Atomic numbers per kind and year within the organization: CC-Q-2026-0001. */
-export async function nextNumber(db: Sql | Tx, kind: "Q" | "PO" | "R" | "WO", prefix = "CC"): Promise<string> {
+export async function nextNumber(db: Sql | Tx, kind: "Q" | "PO" | "R" | "WO" | "INV", prefix = "CC"): Promise<string> {
   const year = new Date().getFullYear();
   const key = `${kind}:${year}`;
   const [row] = await db`insert into ops.counters (key, value) values (${key}, 1)

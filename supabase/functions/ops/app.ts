@@ -49,6 +49,13 @@ import {
   taskRows, tickTask, timeRows, TimeSchema, updateTask, updateTime, UploadSchema,
 } from "./projects.ts";
 import { storageOk } from "./storage.ts";
+import {
+  connectionsPage, connectStripe, createInvoice, createSelection, deletePayment, deleteSelection, disconnectStripe, DraftSchema, emailReceipt, invoiceDetail,
+  invoiceEvent, InvoiceSchema, invoicesPage, invoiceUrl, jobBilling, lockSelection, PaymentSchema, pick, portalUrl, recordPayment, reports, saveInvoice, saveSelection,
+  SelectionSchema, selectionsOf, settleCheckouts, startCheckout, stripeConnected, withInvoice, clientInvoicePage,
+} from "./invoicing.ts";
+import { clientFile, clientMessage, clientPick, CodeSchema, MessageSchema, notifyClient, PickSchema, portalEmail, portalHome, sendCode, signOut, verifyCode, VerifySchema } from "./portal.ts";
+import type { DraftRequest } from "./lib/invoicing.ts";
 import { addDays, toDay, type MyWork, type SchedulePage, type Timesheet } from "./lib/projects.ts";
 
 type U = OpsSessionUser;
@@ -1130,6 +1137,211 @@ route("POST", "/public/change-orders/:token/decline", async ({ params, body }) =
   });
 }, "public");
 
+/* ───────────── AVL: billing (invoices, payments, selections, messages, reports) ───────────── */
+
+/** Billing is for businesses that sell to clients (not a church team's own projects). */
+const seller = async (req: Request) => {
+  const u = await avl(req);
+  if ((await getAvl()).businessType === "CHURCH") throw new HttpError(409, "Invoices are for businesses that sell to clients (AVL → Settings → Business type).");
+  return u;
+};
+const invHref = (id: string) => `/avl/invoices/view?id=${id}`;
+
+route("GET", "/jobs/:id/billing", async ({ req, params }) => {
+  const u = await seller(req);
+  await jobAccess(u, params.id);
+  return jobBilling(params.id);
+});
+route("PUT", "/jobs/:id/phase-billing", async ({ req, params, body }) => {
+  const u = await seller(req);
+  await jobAccess(u, params.id);
+  const { shares } = z.object({ shares: z.record(z.string().max(60), z.number().int().min(0).max(10_000).nullable()) }).parse(await body());
+  const total = Object.values(shares).reduce<number>((s, v) => s + (v ?? 0), 0);
+  if (total > 10_000) throw new HttpError(422, "The phases add up to more than 100% of the contract.");
+  for (const [id, bps] of Object.entries(shares)) await sql`update ops.job_phases set bill_bps = ${bps} where id = ${id} and job_id = ${params.id}`;
+  return jobBilling(params.id);
+});
+route("POST", "/jobs/:id/invoices", async ({ req, params, body }) => {
+  const u = await seller(req);
+  await jobAccess(u, params.id);
+  const inv = await createInvoice(params.id, DraftSchema.parse(await body()) as DraftRequest, u.id);
+  await logActivity({ actorId: u.id, action: "Made invoice", detail: inv.number, area: "AVL", entityType: "Invoice", entityId: inv.id, href: invHref(inv.id) });
+  return inv;
+});
+route("GET", "/invoices", async ({ req, url }) => {
+  await seller(req);
+  const f = url.searchParams.get("show") ?? "OPEN";
+  return invoicesPage(["DRAFT", "OPEN", "OVERDUE", "PAID", "ALL"].includes(f) ? f : "OPEN", (url.searchParams.get("q") ?? "").trim().slice(0, 100));
+});
+route("GET", "/invoices/:id", async ({ req, params }) => {
+  await seller(req);
+  await settleCheckouts(params.id);
+  const invoice = await invoiceDetail(params.id);
+  const budget = invoice.status === "DRAFT" ? await budgetOf(invoice.job.id) : [];
+  return { invoice, cardPayments: await stripeConnected(), clientUrl: invoice.publicToken ? invoiceUrl(invoice.publicToken) : null, canEdit: invoice.status === "DRAFT",
+    budget: budget.filter((b) => b.kind === "ITEM").map((b) => ({ id: b.id, name: b.name, taxable: b.taxable })) };
+});
+route("PUT", "/invoices/:id", async ({ req, params, body }) => {
+  await seller(req);
+  await saveInvoice(params.id, InvoiceSchema.parse(await body()));
+  return invoiceDetail(params.id);
+});
+route("DELETE", "/invoices/:id", async ({ req, params }) => {
+  const u = await seller(req);
+  const [i] = await sql`delete from ops.job_invoices where id = ${params.id} and status = 'DRAFT' returning number`;
+  if (!i) throw new HttpError(409, "Only a draft invoice can be deleted. Void a sent one.");
+  await logActivity({ actorId: u.id, action: "Deleted invoice", detail: i.number, area: "AVL" });
+});
+route("POST", "/invoices/:id/events", async ({ req, params, body }) => {
+  const u = await seller(req);
+  const { event, emailTo } = z.object({ event: z.enum(["SEND", "MARK_SENT", "VOID", "REOPEN"]), emailTo: z.string().max(200).nullish() }).parse(await body());
+  if (event === "VOID" && !can(u, "QUOTE_APPROVE")) throw new HttpError(403, "An AVL Manager voids invoices.");
+  const inv = await invoiceEvent(params.id, event, { emailTo });
+  const verb = { SEND: "Emailed invoice", MARK_SENT: "Sent invoice", VOID: "Voided invoice", REOPEN: "Took invoice back to draft" }[event];
+  await logActivity({ actorId: u.id, action: verb, detail: `${inv.number} · ${inv.title}${event === "SEND" ? ` · to ${inv.sentTo}` : ""}`, area: "AVL", entityType: "Invoice", entityId: inv.id, href: invHref(inv.id) });
+  return inv;
+});
+route("POST", "/invoices/:id/payments", async ({ req, params, body }) => {
+  const u = await seller(req);
+  const out = await recordPayment(params.id, PaymentSchema.parse(await body()), u);
+  const inv = await invoiceDetail(params.id);
+  const paid = inv.payments.find((p) => p.id === out.paymentId)!;
+  await logActivity({ actorId: u.id, action: "Recorded payment", detail: `${inv.number} · ${(paid.amountCents / 100).toFixed(2)}`, area: "AVL", entityType: "Invoice", entityId: inv.id, href: invHref(inv.id) });
+  return { invoice: inv, receiptError: out.receiptError };
+});
+route("POST", "/invoices/:id/check-card", async ({ req, params }) => {
+  await seller(req);
+  const settled = await settleCheckouts(params.id);
+  return { settled, invoice: await invoiceDetail(params.id) };
+});
+route("DELETE", "/payments/:id", async ({ req, params }) => {
+  const u = await seller(req);
+  if (!can(u, "QUOTE_APPROVE")) throw new HttpError(403, "An AVL Manager removes payments.");
+  const p = await deletePayment(params.id);
+  if (p.invoiceId) {
+    const inv = await invoiceDetail(p.invoiceId);
+    await logActivity({ actorId: u.id, action: "Removed payment", detail: `${inv.number} · ${(Number(p.amountCents) / 100).toFixed(2)}`, area: "AVL", entityType: "Invoice", entityId: inv.id, href: invHref(inv.id) });
+    return inv;
+  }
+});
+route("POST", "/payments/:id/receipt", async ({ req, params, body }) => {
+  await seller(req);
+  const { to } = z.object({ to: z.string().trim().max(200) }).parse(await body());
+  if (!isEmail(to)) throw new HttpError(422, "Enter an email address.");
+  const err = await emailReceipt(params.id, to);
+  if (err) throw new HttpError(409, err);
+});
+
+// The job's client side: selections and messages.
+route("GET", "/jobs/:id/client", async ({ req, params }) => {
+  const u = await seller(req);
+  await jobAccess(u, params.id);
+  const [selections, messages, [j]] = await Promise.all([
+    selectionsOf(params.id),
+    sql`select m.*, u.name as staff_name from ops.portal_messages m left join ops.users u on u.id = m.author_user_id where m.job_id = ${params.id} order by m.created_at`,
+    sql`select c.email, c.name from ops.jobs j left join ops.customers c on c.id = j.customer_id where j.id = ${params.id}`,
+  ]);
+  await sql`update ops.portal_messages set read_at = now() where job_id = ${params.id} and from_client and read_at is null`;
+  return {
+    selections,
+    messages: messages.map((m) => ({ id: m.id, fromClient: m.fromClient, author: m.fromClient ? m.authorName : m.staffName ?? m.authorName, body: m.body, at: new Date(m.createdAt).toISOString(), readAt: m.readAt ? new Date(m.readAt).toISOString() : null })),
+    client: j?.name ? { name: j.name as string, email: (j.email as string) ?? null } : null,
+    portalUrl: portalUrl(orgId()),
+  };
+});
+route("POST", "/jobs/:id/messages", async ({ req, params, body }) => {
+  const u = await seller(req);
+  const a = await jobAccess(u, params.id);
+  const { body: text } = z.object({ body: z.string().trim().min(1, "Write a message.").max(5000) }).parse(await body());
+  await sql`insert into ops.portal_messages ${sql({ jobId: params.id, fromClient: false, authorUserId: u.id, authorName: u.name, body: text })}`;
+  const emailError = await notifyClient(params.id, u.name, text);
+  await logActivity({ actorId: u.id, action: "Messaged the client", detail: `${a.job.number} · ${text.slice(0, 80)}`, area: "AVL", entityType: "Job", entityId: params.id, href: `/avl/jobs/view?id=${params.id}&tab=client` });
+  return { emailError };
+});
+route("POST", "/jobs/:id/selections", async ({ req, params, body }) => {
+  const u = await seller(req);
+  await jobAccess(u, params.id);
+  const id = await createSelection(params.id, SelectionSchema.parse(await body()));
+  return { id };
+});
+const selJob = async (id: string) => { const [s] = await sql`select job_id from ops.job_selections where id = ${id}`; if (!s) throw new HttpError(404, "Selection not found"); return s.jobId as string; };
+route("PUT", "/selections/:id", async ({ req, params, body }) => {
+  const u = await seller(req);
+  await jobAccess(u, await selJob(params.id));
+  await saveSelection(params.id, SelectionSchema.parse(await body()));
+});
+route("DELETE", "/selections/:id", async ({ req, params }) => {
+  const u = await seller(req);
+  await jobAccess(u, await selJob(params.id));
+  await deleteSelection(params.id);
+});
+route("POST", "/selections/:id/lock", async ({ req, params, body }) => {
+  const u = await seller(req);
+  await jobAccess(u, await selJob(params.id));
+  const { locked } = z.object({ locked: z.boolean() }).parse(await body());
+  await lockSelection(params.id, locked);
+});
+route("POST", "/selections/:id/pick", async ({ req, params, body }) => {
+  const u = await seller(req);
+  const a = await jobAccess(u, await selJob(params.id));
+  const { optionId } = z.object({ optionId: z.string().max(60) }).parse(await body());
+  const r = await pick(params.id, optionId, u.name);
+  await logActivity({ actorId: u.id, action: "Made a selection for the client", detail: `${a.job.number} · ${r.title}: ${r.option}`, area: "AVL", entityType: "Job", entityId: a.job.id, href: `/avl/jobs/view?id=${a.job.id}&tab=client` });
+});
+
+// Connections: the business's own Stripe account.
+route("GET", "/avl/connections", async ({ req }) => {
+  const u = await avl(req);
+  return { ...(await connectionsPage()), canEdit: isAvlManager(u) };
+});
+route("PUT", "/avl/connections/stripe", async ({ req, body }) => {
+  const u = await avlManager(req);
+  const { key } = z.object({ key: z.string().max(300) }).parse(await body());
+  const out = await connectStripe(key, u.id);
+  await logActivity({ actorId: u.id, action: "Connected Stripe", detail: out.stripe?.accountName ?? out.stripe?.accountId ?? "", area: "AVL", href: "/avl/settings" });
+  return { ...out, canEdit: true };
+});
+route("DELETE", "/avl/connections/stripe", async ({ req }) => {
+  const u = await avlManager(req);
+  await disconnectStripe();
+  await logActivity({ actorId: u.id, action: "Disconnected Stripe", area: "AVL", href: "/avl/settings" });
+});
+
+route("GET", "/avl/reports", async ({ req, url }) => {
+  await avl(req);
+  const d = (k: string, fb: string) => { const v = url.searchParams.get(k) ?? ""; return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : fb; };
+  const now = new Date();
+  const to = d("to", toDay(now));
+  const from = d("from", `${now.getFullYear()}-01-01`);
+  return reports(from > to ? to : from, to);
+});
+
+// The client's invoice page and card payments: no sign-in.
+route("GET", "/public/invoices/:token", async ({ params, url }) => withInvoice(params.token, async (id) => {
+  const paid = url.searchParams.get("paid");
+  return clientInvoicePage(id, Boolean(paid));
+}), "public");
+route("POST", "/public/invoices/:token/pay", async ({ params }) => withInvoice(params.token, async (id, org) => startCheckout(id, org)), "public");
+
+// The client portal (signed in with an emailed code; see portal.ts).
+route("POST", "/public/portal/code", async ({ body }) => sendCode(CodeSchema.parse(await body())), "public");
+route("POST", "/public/portal/verify", async ({ body }) => verifyCode(VerifySchema.parse(await body())), "public");
+route("GET", "/public/portal", async ({ req, url }) => portalHome(await portalEmail(req), url.searchParams.get("b")), "public");
+route("POST", "/public/portal/messages", async ({ req, body }) => {
+  const email = await portalEmail(req);
+  const input = MessageSchema.parse(await body());
+  await clientMessage(email, input);
+  return portalHome(email, input.b ?? null);
+}, "public");
+route("POST", "/public/portal/selections/:id", async ({ req, params, body }) => {
+  const email = await portalEmail(req);
+  const input = PickSchema.parse(await body());
+  await clientPick(email, params.id, input);
+  return portalHome(email, input.b ?? null);
+}, "public");
+route("GET", "/public/portal/files/:id", async ({ req, params, url }) => clientFile(await portalEmail(req), params.id, url.searchParams.get("b")), "public");
+route("POST", "/public/portal/signout", async ({ req }) => { await signOut(req); }, "public");
+
 /* ───────────── AVL: leads (CRM) ───────────── */
 
 const STAGE = z.enum(["NEW", "CONTACTED", "SITE_VISIT", "PROPOSAL", "WON", "LOST"]);
@@ -1593,6 +1805,7 @@ const BusinessSchema = z.object({
   defaultTaxBps: z.number().int().min(0).max(5000), defaultDepositBps: z.number().int().min(0).max(10_000),
   defaultMarginBps: z.number().int().min(0).max(9900), laborRateCents: z.number().int().min(0).max(1_000_000_000),
   quoteValidDays: z.number().int().min(1).max(365), quoteTerms: optStr(20_000),
+  invoiceDueDays: z.number().int().min(0).max(365).default(30), invoiceNotes: optStr(5000),
   businessType: z.enum(["INTEGRATOR", "CHURCH"]).default("INTEGRATOR"),
   jobPrefix: z.string().max(10).nullish().transform((v) => v?.toUpperCase().replace(/[^A-Z0-9]/g, "") || "J"),
 });
