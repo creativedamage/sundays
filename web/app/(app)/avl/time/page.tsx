@@ -6,7 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { addDays, fmtHours, parseDay, toDay, type TimeEntry, type Timesheet } from "@shared/ops/projects";
 import { fmtMoney, ops, useOps, useOpsRefresh } from "@/lib/ops";
-import { Card, ErrorBox, Loading, PageHeader } from "@/components/ops/OpsUi";
+import { Card, ErrorBox, Loading, PageHeader, Stack } from "@/components/ops/OpsUi";
 import { Spinner } from "@/components/ui";
 import { ClockCard, TimeModal, TimeTable } from "@/components/avl/project/Time";
 
@@ -52,8 +52,8 @@ export default function TimePage() {
             )}
           </div>
           <Card title="The week">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+            <Stack>
+              <table className="rtable w-full min-w-[720px] text-sm">
                 <thead className="border-b border-line text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted [&_th]:px-3 [&_th]:py-2">
                   <tr><th className="text-left">Who</th>{days.map((x) => <th key={x} className={clsx("w-[11%] text-right", x === today && "text-accent")}>{parseDay(x).toLocaleDateString("en-US", { weekday: "short", day: "numeric" })}</th>)}<th className="w-24 text-right">Total</th></tr>
                 </thead>
@@ -71,7 +71,7 @@ export default function TimePage() {
                   {!people.length && <tr><td colSpan={9} className="py-10 text-center text-ink-faint">No time this week.</td></tr>}
                 </tbody>
               </table>
-            </div>
+            </Stack>
           </Card>
           <Card title="Entries" action={t.canApprove && sel.size > 0 ? (
             <div className="flex gap-2">

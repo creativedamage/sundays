@@ -19,7 +19,7 @@ export interface GanttBar {
 }
 interface Drag { id: string; mode: "move" | "start" | "end"; x0: number; start: string; end: string; moved: boolean }
 
-export function Gantt({ from, to, rows, bars, onChange, onBarClick, dayWidth: minDay = 30, labelWidth = 210, empty }: {
+export function Gantt({ from, to, rows, bars, onChange, onBarClick, dayWidth: wantDay = 30, labelWidth: wantLabel = 210, empty }: {
   from: string; to: string; rows: GanttRow[]; bars: GanttBar[]; labelWidth?: number; empty?: React.ReactNode;
   /** The narrowest a day gets; days widen to fill the space there is. */
   dayWidth?: number;
@@ -40,6 +40,10 @@ export function Gantt({ from, to, rows, bars, onChange, onBarClick, dayWidth: mi
     ro.observe(el); setSpace(el.clientWidth);
     return () => ro.disconnect();
   }, []);
+  // On a phone: a narrower name column and days, so more of the timeline fits before it scrolls.
+  const phone = space > 0 && space < 640;
+  const labelWidth = phone ? Math.min(wantLabel, 124) : wantLabel;
+  const minDay = phone ? Math.min(wantDay, 16) : wantDay;
   const dayWidth = Math.max(minDay, Math.floor((space - labelWidth - 1) / days.length) || 0);
   const width = days.length * dayWidth;
 
@@ -154,7 +158,7 @@ export function Gantt({ from, to, rows, bars, onChange, onBarClick, dayWidth: mi
             </div>
           );
         })}
-        {!rows.length && <div className="px-4 py-12 text-center text-sm text-ink-faint">{empty ?? "Nothing scheduled."}</div>}
+        {!rows.length && <div style={{ width: space || undefined }} className="sticky left-0 px-4 py-12 text-center text-sm text-ink-faint">{empty ?? "Nothing scheduled."}</div>}
       </div>
       {drag && <div className="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-surface shadow-lg">{fmtRange(drag.start, drag.end)}</div>}
     </div>

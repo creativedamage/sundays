@@ -8,7 +8,7 @@ import { marginFor, type LaborRate, type MarkupRule, type PricingSetup } from "@
 import { priceForMargin } from "@shared/ops/math";
 import { fmtMoney, fmtPct, ops, useOps, useOpsRefresh } from "@/lib/ops";
 import { useOpsUser } from "@/components/ops/context";
-import { Card, ErrorBox, Loading, MoneyInput, PageHeader, PercentInput } from "@/components/ops/OpsUi";
+import { Card, ErrorBox, Loading, MoneyInput, PageHeader, PercentInput, Stack } from "@/components/ops/OpsUi";
 import { Spinner } from "@/components/ui";
 
 export default function Pricing() {
@@ -47,8 +47,8 @@ function Rates({ initial, canEdit }: { initial: LaborRate[]; canEdit: boolean })
   };
   return (
     <Card eyebrow="Labor" title="Labor rates" action={canEdit && <button className="btn-ghost text-xs" onClick={() => setRows([...rows, { id: tmp(), name: "", description: null, unit: "hr", costCents: 0, priceCents: 0, taxable: false, active: true }])}><Plus size={13} /> Add rate</button>}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+      <Stack>
+        <table className="rtable w-full min-w-[760px] text-sm">
           <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-3 [&_th]:py-2.5">
             <tr><th>Rate</th><th className="w-20">Per</th><th className="w-32 text-right">Costs you</th><th className="w-32 text-right">Sells for</th><th className="w-20 text-right">Margin</th><th className="w-16">Taxed</th><th className="w-16">In use</th><th className="w-10" /></tr>
           </thead>
@@ -71,7 +71,7 @@ function Rates({ initial, canEdit }: { initial: LaborRate[]; canEdit: boolean })
             {!rows.length && <tr><td colSpan={8} className="py-10 text-center text-ink-faint">No labor rates yet. Add install, programming, travel… with what each costs you and what you charge.</td></tr>}
           </tbody>
         </table>
-      </div>
+      </Stack>
       {canEdit && (
         <div className="flex items-center gap-3 border-t border-line p-3">
           <button className="btn-primary" disabled={!dirty || busy} onClick={save}>{busy && <Spinner />}Save labor rates</button>
@@ -101,8 +101,8 @@ function Rules({ initial, setup, canEdit }: { initial: MarkupRule[]; setup: Pric
   return (
     <Card eyebrow="Products" title="Markup rules" action={canEdit && <button className="btn-ghost text-xs" onClick={() => setRows([...rows, { key: tmp(), manufacturer: null, category: null, vendorId: null, marginBps: setup.defaultMarginBps }])}><Plus size={13} /> Add rule</button>}>
       <p className="px-4 pt-3 text-xs text-ink-muted">A product added from a price list gets the margin of the rule that fits it best: a rule naming a manufacturer <i>and</i> a category beats one naming just one. Blank means “any”.</p>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+      <Stack>
+        <table className="rtable w-full min-w-[720px] text-sm">
           <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-3 [&_th]:py-2.5">
             <tr><th>Manufacturer</th><th>Category</th><th>Vendor</th><th className="w-32">Margin</th><th className="w-32 text-right">$1,000 cost sells for</th><th className="w-10" /></tr>
           </thead>
@@ -124,7 +124,7 @@ function Rules({ initial, setup, canEdit }: { initial: MarkupRule[]; setup: Pric
             {!rows.length && <tr><td colSpan={6} className="py-10 text-center text-ink-faint">No rules: every product gets your default margin.</td></tr>}
           </tbody>
         </table>
-      </div>
+      </Stack>
       <div className="flex flex-wrap items-end gap-2 border-t border-line bg-hover/20 p-3 text-xs">
         <span className="label mb-2 mr-1">Try it</span>
         <input className="input w-36 py-1" placeholder="Manufacturer" value={test.manufacturer} onChange={(e) => setTest({ ...test, manufacturer: e.target.value })} />

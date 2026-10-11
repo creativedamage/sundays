@@ -11,7 +11,7 @@ import { priceForMargin } from "@shared/ops/math";
 import type { CatalogProduct } from "@shared/ops/types";
 import { fmtMoney, fmtPct, ops, useOps, useOpsRefresh } from "@/lib/ops";
 import { useOpsUser } from "@/components/ops/context";
-import { ErrorBox, Field, Loading, MoneyInput } from "@/components/ops/OpsUi";
+import { ErrorBox, Field, Loading, MoneyInput, Stack } from "@/components/ops/OpsUi";
 import { Spinner } from "@/components/ui";
 import { CatalogPicker, guessSection } from "@/components/avl/CatalogPicker";
 
@@ -109,8 +109,8 @@ function Editor({ id, setup, initial }: { id: string; setup: PricingSetup; initi
                 <button className="btn-outline" onClick={addCustom}>+ Custom line</button>
               </div>
             </header>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-sm">
+            <Stack>
+              <table className="rtable w-full min-w-[860px] text-sm">
                 <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-3 [&_th]:py-2.5">
                   <tr><th>Line</th><th className="w-24">Qty</th><th className="w-32 text-right">Unit cost</th><th className="w-36 text-right">Unit price</th><th className="w-28 text-right">Ext. price</th><th className="w-12">Tax</th><th className="w-20" /></tr>
                 </thead>
@@ -147,7 +147,7 @@ function Editor({ id, setup, initial }: { id: string; setup: PricingSetup; initi
                   {!items.length && <tr><td colSpan={7} className="py-12 text-center text-ink-faint">Add the products, labor and anything else that goes in this kit.</td></tr>}
                 </tbody>
               </table>
-            </div>
+            </Stack>
           </section>
         </div>
         <aside className="space-y-5">

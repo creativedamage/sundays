@@ -46,8 +46,8 @@ function Quotes() {
             <option value="">All clients</option>{d.data!.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}
-        <form className="ml-auto" onSubmit={(e) => { e.preventDefault(); go({ q }); }}>
-          <input className="input w-64" placeholder="Search number, title, client…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <form className="w-full sm:ml-auto sm:w-auto" onSubmit={(e) => { e.preventDefault(); go({ q }); }}>
+          <input className="input w-full sm:w-64" placeholder="Search number, title, client…" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
       </div>
       <ErrorBox error={d.error} />

@@ -107,6 +107,22 @@ body {
 /* Printing (stage plots): only the printable area, on white. */
 @page proposal { size: letter portrait; margin: 0.5in; }
 
+/* Phones: tables marked rtable stack each row into a card, cells labeled with their column (useStackLabels). */
+@media (max-width: 639.98px) {
+  table.rtable { display: block; min-width: 0 !important; }
+  table.rtable > thead { display: none; }
+  table.rtable > tbody, table.rtable > tfoot { display: block; }
+  table.rtable tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem 1rem; padding: 0.75rem 1rem; }
+  table.rtable td { display: block; min-width: 0; width: auto !important; padding: 0 !important; text-align: left !important; white-space: normal !important; overflow-wrap: anywhere; }
+  table.rtable td:first-child, table.rtable td[colspan]:not([colspan="1"]) { grid-column: 1 / -1; }
+  table.rtable td:empty { display: none; }
+  table.rtable td[data-label=""]:last-child:not(:first-child) { justify-self: end; align-self: end; }
+  table.rtable td[data-label]:not([data-label=""]):not(:first-child)::before {
+    content: attr(data-label); display: block; margin-bottom: 2px; font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgb(var(--c-ink-muted));
+  }
+}
+
 @media print {
   @page { size: landscape; margin: 0.4in; }
   html, body { background: #fff !important; color-scheme: light !important; }

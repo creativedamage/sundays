@@ -8,7 +8,7 @@ import type { JobPage } from "@shared/ops/jobs";
 import { fmtHours, parseHours, runningMinutes, toDay, type TimeEntry } from "@shared/ops/projects";
 import { fmtMoney, money0, ops, useOps, useOpsRefresh } from "@/lib/ops";
 import { useOpsUser } from "@/components/ops/context";
-import { Card, Empty, ErrorBox, Field, KpiRow, Loading, Pill } from "@/components/ops/OpsUi";
+import { Card, Empty, ErrorBox, Field, KpiRow, Loading, Pill, Stack } from "@/components/ops/OpsUi";
 import { Modal, Spinner } from "@/components/ui";
 import { fmtDay } from "./Gantt";
 import type { P } from "./bits";
@@ -67,8 +67,8 @@ export function TimeTable({ entries, seesCost, showPerson, showJob, onEdit, onCh
   if (!entries.length) return <Empty>No time logged yet.</Empty>;
   const pickable = entries.filter((t) => !t.running);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
+    <Stack>
+      <table className="rtable w-full min-w-[640px] text-sm">
         <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-3 [&_th]:py-2">
           <tr>
             {select && <th className="w-8"><input type="checkbox" checked={pickable.length > 0 && pickable.every((t) => select.ids.has(t.id))} onChange={(e) => select.set(new Set(e.target.checked ? pickable.map((t) => t.id) : []))} aria-label="Select all" /></th>}
@@ -104,7 +104,7 @@ export function TimeTable({ entries, seesCost, showPerson, showJob, onEdit, onCh
           </tr>
         </tfoot>
       </table>
-    </div>
+    </Stack>
   );
 }
 

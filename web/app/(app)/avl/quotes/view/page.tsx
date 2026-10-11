@@ -11,7 +11,7 @@ import { availableEvents, isDeletable, isEditable, type QuoteEventType } from "@
 import type { CatalogProduct, LineItemDraft, PublicQuote, QuoteDTO, QuotePage } from "@shared/ops/types";
 import { isAlternate, isOption, isPackage, marginFor, normalizeOptions, optionGroups, PACKAGE_GROUP, PACKAGE_LETTERS, packageLabel, type KitLine, type KitRow, type LaborRate } from "@shared/ops/estimating";
 import { fmtMoney, fmtPct, ops, useOps, useOpsRefresh } from "@/lib/ops";
-import { ErrorBox, Field, Loading, MoneyInput, PercentInput, QuoteStatusBadge } from "@/components/ops/OpsUi";
+import { ErrorBox, Field, Loading, MoneyInput, PercentInput, QuoteStatusBadge, Stack } from "@/components/ops/OpsUi";
 import { Modal, Spinner } from "@/components/ui";
 import { CatalogPicker, guessSection } from "@/components/avl/CatalogPicker";
 import { KitPicker } from "@/components/avl/KitPicker";
@@ -237,8 +237,8 @@ function Builder({ page }: { page: QuotePage }) {
                 </div>
               )}
             </header>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-sm">
+            <Stack>
+              <table className="rtable w-full min-w-[1120px] text-sm">
                 <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-3 [&_th]:py-2.5">
                   <tr><th className="w-32">Section</th><th className="min-w-[320px]">Item</th><th className="w-24">Qty</th><th className="w-32 text-right">Unit cost</th><th className="w-32 text-right">Unit price</th><th className="w-24 text-right">Margin</th><th className="w-28 text-right">Ext. price</th><th className="w-12">Tax</th><th className="w-20" /></tr>
                 </thead>
@@ -337,7 +337,7 @@ function Builder({ page }: { page: QuotePage }) {
                   {" "}The client can change these on the proposal link before signing; the total follows. When it&apos;s accepted, what wasn&apos;t picked comes off the proposal (the version sent keeps it).
                 </div>
               )}
-            </div>
+            </Stack>
           </section>
 
           <div className="grid gap-5 md:grid-cols-2">

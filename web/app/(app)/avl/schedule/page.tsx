@@ -2,7 +2,7 @@
 /** Every job's phases on one calendar: by job (what's happening where) or by person (who is where, which day). */
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { addDays, parseDay, toDay, type SchedulePage } from "@shared/ops/projects";
 import { ops, useOps, useOpsRefresh } from "@/lib/ops";
@@ -19,6 +19,8 @@ export default function Schedule() {
   const router = useRouter();
   const refresh = useOpsRefresh();
   const [span, setSpan] = useState<Span>("month");
+  // Two weeks fit across a phone without scrolling.
+  useEffect(() => { if (window.matchMedia("(max-width: 639.98px)").matches) setSpan("2w"); }, []);
   const [from, setFrom] = useState(() => monday(toDay(new Date())));
   const [by, setBy] = useState<"job" | "person">("job");
   const to = addDays(from, SPAN[span].days - 1);

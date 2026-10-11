@@ -5,7 +5,7 @@ import { jobStatusLabel, type JobStatus } from "@shared/ops/jobs";
 import clsx from "clsx";
 import { CHECKIN_LEVELS, type CheckinLevel } from "@shared/ops/checkin";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { labelStatus, type RequestStatus } from "@shared/ops/workflow";
 import { STATUS_LABEL, type QuoteStatus } from "@shared/ops/state-machine";
 import { parseMoneyToCents } from "@shared/ops/math";
@@ -194,14 +194,53 @@ export function AvlSelect({ value, onChange }: { value: AvlLevel; onChange: (a: 
 }
 
 /** A table that scrolls sideways on narrow windows. */
+/**
+ * On a phone, a table's rows stack into cards (globals.css, `table.rtable`): each cell is labeled
+ * with its column's name, read from the table's last header row, so nothing scrolls sideways.
+ */
+export function useStackLabels(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const label = () => {
+      for (const t of root.querySelectorAll<HTMLTableElement>("table.rtable")) {
+        const heads = t.tHead?.rows;
+        if (!heads?.length) continue;
+        const names: string[] = [];
+        for (const th of heads[heads.length - 1].cells) for (let i = 0; i < th.colSpan; i++) names.push(i ? "" : (th.textContent ?? "").trim());
+        const rows = [...t.tBodies].flatMap((b) => [...b.rows]).concat(t.tFoot ? [...t.tFoot.rows] : []);
+        for (const tr of rows) {
+          let c = 0;
+          for (const td of tr.cells) {
+            const n = td.colSpan > 1 ? "" : names[c] ?? "";
+            if (td.dataset.label !== n) td.dataset.label = n;
+            c += td.colSpan;
+          }
+        }
+      }
+    };
+    label();
+    const mo = new MutationObserver(label);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [ref]);
+}
+
+/** A sideways-scrolling box on a computer; on a phone the `rtable` tables inside it stack into cards. */
+export function Stack({ children, className }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useStackLabels(ref);
+  return <div ref={ref} className={clsx("overflow-x-auto", className)}>{children}</div>;
+}
+
 export function Table({ head, children, min = 760 }: { head: React.ReactNode; children: React.ReactNode; min?: number }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm" style={{ minWidth: min }}>
+    <Stack>
+      <table className="rtable w-full text-sm" style={{ minWidth: min }}>
         <thead className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted [&_th]:px-4 [&_th]:py-2.5">{head}</thead>
         <tbody className="divide-y divide-line [&_td]:px-4 [&_td]:py-3 [&_tr:hover]:bg-hover/40">{children}</tbody>
       </table>
-    </div>
+    </Stack>
   );
 }
 

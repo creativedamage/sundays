@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { budgetRows, budgetTotals, COST_TYPES, itemMoney, JOB_STATUSES, type BudgetItem, type CostType, type JobDetail, type JobPage, type JobStatus } from "@shared/ops/jobs";
 import { priceForMargin } from "@shared/ops/math";
 import { fmtDate, fmtDateTime, fmtMoney, fmtPct, money0, ops, useOps, useOpsMe, useOpsRefresh } from "@/lib/ops";
-import { Card, Empty, ErrorBox, Field, JobStatusBadge, KpiRow, Loading, MoneyInput, PercentInput, QuoteStatusBadge, Table } from "@/components/ops/OpsUi";
+import { Card, Empty, ErrorBox, Field, JobStatusBadge, KpiRow, Loading, MoneyInput, PercentInput, QuoteStatusBadge, Stack, Table } from "@/components/ops/OpsUi";
 import { Modal, Spinner } from "@/components/ui";
 import type { QuoteStatus } from "@shared/ops/state-machine";
 import { fmtHours, phaseOn, PHASE_STATUSES, toDay } from "@shared/ops/projects";
@@ -71,7 +71,10 @@ function JobView() {
         </div>
         {!crewView && <button className="btn-outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit job</button>}
       </div>
-      <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-line px-1">
+      <select className="input w-full sm:hidden" value={tab} onChange={(e) => setTab(e.target.value as typeof tab)} aria-label="Section">
+        {tabs.map(([k, label]) => <option key={k} value={k}>{label}{k === "tasks" && d.data!.project.openTasks > 0 ? ` (${d.data!.project.openTasks} open)` : ""}</option>)}
+      </select>
+      <div className="-mx-1 hidden gap-1 overflow-x-auto border-b border-line px-1 sm:flex">
         {tabs.map(([k, label]) => (
           <button key={k} ref={k === tab ? (el) => el?.scrollIntoView({ block: "nearest", inline: "nearest" }) : undefined} onClick={() => setTab(k)} className={clsx("-mb-px shrink-0 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-semibold transition", tab === k ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink")}>
             {label}{k === "tasks" && d.data!.project.openTasks > 0 && <span className="ml-1.5 rounded-full bg-accent-soft px-1.5 text-[10px] tabular-nums text-accent">{d.data!.project.openTasks}</span>}
@@ -335,8 +338,8 @@ function Budget({ page, church, onSaved }: { page: JobPage; church: boolean; onS
     <div className="space-y-3">
       {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
       <section className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className={clsx("w-full text-sm", church ? "min-w-[860px]" : "min-w-[1100px]")}>
+        <Stack>
+          <table className={clsx("rtable w-full text-sm", church ? "min-w-[860px]" : "min-w-[1100px]")}>
             <thead>
               <tr className="text-[10px] font-semibold uppercase tracking-[0.08em]">
                 <th className="px-3 pt-2.5 text-left text-ink-faint" colSpan={church ? 2 : 1} />
@@ -415,7 +418,7 @@ function Budget({ page, church, onSaved }: { page: JobPage; church: boolean; onS
               </tr>
             </tfoot>
           </table>
-        </div>
+        </Stack>
       </section>
       <div className={clsx("sticky bottom-3 z-10 flex justify-center transition", dirty ? "opacity-100" : "pointer-events-none opacity-0")}>
         <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 shadow-lg">
