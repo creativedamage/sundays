@@ -13,7 +13,7 @@ import { Banner, input, label, Sheet, Shell, SignForm, when } from "@/components
 
 const day = (d: string | null) => (d ? new Date(d + "T12:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null);
 
-function useLoad<T>(path: string | null) {
+export function useLoad<T>(path: string | null) {
   const [state, setState] = useState<{ data: T } | { error: string; draft?: boolean } | null>(null);
   const load = useCallback(async () => {
     if (!path) return setState({ error: "This link is missing part of its address. Open it again from the email." });
@@ -24,7 +24,7 @@ function useLoad<T>(path: string | null) {
   return { state, setState, reload: load };
 }
 
-function Bar({ title, sub }: { title: string; sub: string }) {
+export function Bar({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="no-print sticky top-0 z-20 border-b border-[#e2e8f0] bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-[8.5in] items-center gap-3 px-4 py-2.5">
@@ -35,11 +35,11 @@ function Bar({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-function Oops({ title, text }: { title: string; text: string }) {
+export function Oops({ title, text }: { title: string; text: string }) {
   return <Shell><div className="mx-auto max-w-md px-4 py-24 text-center"><div className="text-lg font-semibold text-[#0f172a]">{title}</div><p className="mt-2 text-[#475569]">{text}</p></div></Shell>;
 }
 
-function Letterhead({ business, logo, kind, number, right }: { business: { name: string; address?: string | null; phone: string | null; email: string | null }; logo: string | null; kind: string; number: string; right?: React.ReactNode }) {
+export function Letterhead({ business, logo, kind, number, right }: { business: { name: string; address?: string | null; phone: string | null; email: string | null }; logo: string | null; kind: string; number: string; right?: React.ReactNode }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-6 border-b border-[#e2e8f0] pb-6">
       <div className="flex items-start gap-3">
@@ -51,8 +51,8 @@ function Letterhead({ business, logo, kind, number, right }: { business: { name:
   );
 }
 
-const Doc = ({ children }: { children: React.ReactNode }) => <div className="mx-auto max-w-[8.5in] px-3 pb-32 pt-4 sm:px-4 print:p-0"><div className="rounded-xl bg-white p-5 text-[#111] shadow-sm ring-1 ring-[#e2e8f0] sm:p-10 print:rounded-none print:p-0 print:shadow-none print:ring-0">{children}</div></div>;
-const th = "border-b border-[#e2e8f0] py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]";
+export const Doc = ({ children }: { children: React.ReactNode }) => <div className="mx-auto max-w-[8.5in] px-3 pb-32 pt-4 sm:px-4 print:p-0"><div className="rounded-xl bg-white p-5 text-[#111] shadow-sm ring-1 ring-[#e2e8f0] sm:p-10 print:rounded-none print:p-0 print:shadow-none print:ring-0">{children}</div></div>;
+export const th = "border-b border-[#e2e8f0] py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]";
 
 /* ───────────── Vendor's purchase order ───────────── */
 

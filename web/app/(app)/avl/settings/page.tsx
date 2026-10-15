@@ -22,6 +22,50 @@ export default function Business() {
   return <Form key={JSON.stringify(d.data.business)} data={d.data} />;
 }
 
+type Conn = { stripe: { accountId: string | null; accountName: string | null; livemode: boolean; connectedAt: string; connectedBy: string | null } | null; canEdit: boolean };
+
+/** The business's own Stripe account: clients pay invoices by card, and the money goes straight there. */
+function Connections() {
+  const d = useOps<Conn>("/avl/connections");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const s = d.data?.stripe;
+  return (
+    <div id="connections">
+      <Card eyebrow="Connections" title="Card payments (Stripe)">
+        <div className="space-y-3 p-4 text-sm">
+          {!d.data ? <Spinner /> : s ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-medium">Connected to {s.accountName ?? s.accountId ?? "your Stripe account"} {s.livemode ? <span className="text-ok">· live</span> : <span className="text-warn">· test mode (no real charges)</span>}</div>
+                <div className="text-xs text-ink-muted">Clients see “Pay by card” on invoices. Since {new Date(s.connectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{s.connectedBy ? ` · ${s.connectedBy}` : ""}.</div>
+              </div>
+              {d.data.canEdit && <button className="btn-ghost text-bad" onClick={async () => { if (!window.confirm("Disconnect Stripe? Clients won’t be able to pay invoices by card.")) return; try { await ops("/avl/connections/stripe", { method: "DELETE" }); await d.refetch(); } catch (e) { toast.error((e as Error).message); } }}>Disconnect</button>}
+            </div>
+          ) : (
+            <p className="text-ink-soft">Let clients pay invoices by card. Payments go straight to your own Stripe account; Sundays never holds the money.</p>
+          )}
+          {d.data?.canEdit && (
+            <form className="space-y-2" onSubmit={async (e) => {
+              e.preventDefault(); setBusy(true); setError(null);
+              try { await ops("/avl/connections/stripe", { method: "PUT", json: { key } }); setKey(""); await d.refetch(); toast.success("Stripe connected"); }
+              catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+            }}>
+              <Field label={s ? "Replace the key" : "Your Stripe secret key"} hint={<>In Stripe: Developers → API keys → Secret key (starts with sk_live_). A restricted key works too if it can create Checkout Sessions and read them. It’s stored encrypted and never shown again.</>}>
+                <input type="password" autoComplete="off" className="input font-mono" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk_live_…" />
+              </Field>
+              {error && <p className="rounded-lg border border-bad/30 bg-bad-soft px-3 py-2 text-bad">{error}</p>}
+              <button className="btn-primary" disabled={busy || !key.trim()}>{busy && <Spinner />} {s ? "Replace key" : "Connect Stripe"}</button>
+            </form>
+          )}
+          {!d.data?.canEdit && !s && <p className="text-xs text-ink-faint">An AVL Manager can connect it.</p>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function Form({ data }: { data: Data }) {
   const branded = useModule("branding");
   const refresh = useOpsRefresh();
@@ -79,9 +123,20 @@ function Form({ data }: { data: Data }) {
                 <Field label="Default terms & conditions"><textarea rows={6} className="input" value={b.quoteTerms ?? ""} onChange={(e) => setB({ ...b, quoteTerms: e.target.value })} /></Field>
               </div>
             </Card>
+            {b.businessType !== "CHURCH" && (
+              <Card eyebrow="Billing" title="Invoices">
+                <div className="grid gap-4 p-4 sm:grid-cols-3 lg:grid-cols-6">
+                  <Field label="Due in (days)" hint="0 = due on receipt"><input type="number" min={0} max={365} className="input" value={b.invoiceDueDays ?? 30} onChange={(e) => setB({ ...b, invoiceDueDays: Math.max(0, Math.min(365, parseInt(e.target.value) || 0)) })} /></Field>
+                </div>
+                <div className="border-t border-line p-4">
+                  <Field label="Notes on every invoice" hint="How to pay by check or transfer, late fees, thank you."><textarea rows={3} className="input" value={b.invoiceNotes ?? ""} onChange={(e) => setB({ ...b, invoiceNotes: e.target.value })} placeholder="Make checks payable to… / ACH: routing… account…" /></Field>
+                </div>
+              </Card>
+            )}
           </fieldset>
           {!ro && <button className="btn-primary" disabled={busy}>{busy && <Spinner />}Save settings</button>}
         </form>
+        {b.businessType !== "CHURCH" && <Connections />}
       </div>
     </>
   );

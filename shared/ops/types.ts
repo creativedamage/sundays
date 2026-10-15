@@ -192,6 +192,9 @@ export interface AvlBusiness {
   postalCode: string | null; phone: string | null; email: string | null; website: string | null; ein: string | null; salesTaxId: string | null;
   quotePrefix: string; defaultTaxBps: number; defaultDepositBps: number; defaultMarginBps: number; laborRateCents: number;
   quoteValidDays: number; quoteTerms: string | null;
+  /** New invoices are due this many days after they're dated; the notes print at the bottom. */
+  invoiceDueDays: number;
+  invoiceNotes: string | null;
   /** Integrator (sells to clients) or church team (its own projects). */
   businessType: "INTEGRATOR" | "CHURCH"; jobPrefix: string;
 }

@@ -28,11 +28,12 @@ import { JobTime } from "@/components/avl/project/Time";
 import { fmtRange, phaseHex } from "@/components/avl/project/Gantt";
 import { Faces } from "@/components/avl/project/bits";
 import { JobChangesTab, JobCostingTab, JobPurchasingTab } from "@/components/avl/purchasing/JobTabs";
+import { JobClientTab, JobInvoicingTab } from "@/components/avl/billing/JobBilling";
 
 export default function Page() { return <Suspense><JobView /></Suspense>; }
 
-type Tab = "dashboard" | "budget" | "costing" | "profit" | "purchasing" | "changes" | "schedule" | "tasks" | "logs" | "files" | "time" | "documents";
-const TABS: Tab[] = ["dashboard", "budget", "costing", "profit", "purchasing", "changes", "schedule", "tasks", "logs", "files", "time", "documents"];
+type Tab = "dashboard" | "budget" | "costing" | "profit" | "purchasing" | "changes" | "invoicing" | "client" | "schedule" | "tasks" | "logs" | "files" | "time" | "documents";
+const TABS: Tab[] = ["dashboard", "budget", "costing", "profit", "purchasing", "changes", "invoicing", "client", "schedule", "tasks", "logs", "files", "time", "documents"];
 
 function JobView() {
   const sp = useSearchParams();
@@ -49,7 +50,7 @@ function JobView() {
     ...(crewView ? [] : [["budget", "Budget"], ["costing", "Job costing"]] as [Tab, string][]),
     ...(crewView || church ? [] : [["profit", "Profit"]] as [Tab, string][]),
     ...(crewView ? [] : [["purchasing", "Purchasing"]] as [Tab, string][]),
-    ...(crewView || church ? [] : [["changes", "Change orders"]] as [Tab, string][]),
+    ...(crewView || church ? [] : [["changes", "Change orders"], ["invoicing", "Invoicing"], ["client", "Client"]] as [Tab, string][]),
     ["schedule", "Schedule"], ["tasks", "Tasks"], ["logs", "Daily logs"], ["files", "Files"], ["time", "Time"],
     ...(crewView ? [] : [["documents", "Documents"]] as [Tab, string][]),
   ];
@@ -92,6 +93,8 @@ function JobView() {
       {tab === "costing" && <JobCostingTab page={d.data} church={church} />}
       {tab === "purchasing" && <JobPurchasingTab page={d.data} />}
       {tab === "changes" && <JobChangesTab page={d.data} />}
+      {tab === "invoicing" && <JobInvoicingTab page={d.data} />}
+      {tab === "client" && <JobClientTab page={d.data} />}
       {tab === "documents" && <Documents page={d.data} />}
       {editing && <EditJob page={d.data} church={church} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void d.refetch(); }} />}
     </div>

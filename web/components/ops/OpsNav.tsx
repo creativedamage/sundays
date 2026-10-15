@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowLeft, CalendarRange, Clock3, CreditCard, Gauge, Layers, ShieldHalf, Activity, AudioLines, Boxes, Briefcase, Building, Building2, ClipboardList, FileText, Hammer, Inbox, LayoutGrid, LogOut, Plus, Search, Settings2, Tags, Target, Package, Percent, Users, UsersRound, Mail, ShoppingCart } from "lucide-react";
+  ArrowLeft, CalendarRange, Clock3, CreditCard, Gauge, Layers, ShieldHalf, Activity, AudioLines, Boxes, Briefcase, Building, Building2, ClipboardList, FileText, Hammer, Inbox, LayoutGrid, LogOut, Plus, Search, Settings2, Tags, Target, Package, Percent, Users, UsersRound, Mail, ShoppingCart, ReceiptText, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { OpsMe } from "@shared/ops/types";
@@ -92,7 +92,9 @@ export function AvlNav() {
       { href: "/avl/jobs", label: "Jobs", icon: Hammer },
       { href: "/avl/schedule", label: "Schedule", icon: CalendarRange },
       { href: "/avl/purchasing", label: "Purchasing", icon: ShoppingCart, badge: n.poApprovals ?? 0, tone: "warn" as const },
+      ...(n.avlChurch ? [] : [{ href: "/avl/invoices", label: "Invoices", icon: ReceiptText }]),
       { href: "/avl/time", label: "Time", icon: Clock3 },
+      { href: "/avl/reports", label: "Reports", icon: BarChart3 },
     ] },
     { title: "Pricing", items: [
       { href: "/avl/catalog", label: "Product pricing", icon: Search },

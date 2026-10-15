@@ -4,6 +4,33 @@ Each version's notes become its GitHub release notes (and what "What's new" show
 the newest version first. The line right under a version heading is its one-line summary: it names
 the GitHub Actions run and the release commit.
 
+## 1.44.0
+Sundays AVL works on phones, and bills clients: invoices, card payments, a client portal and reports.
+- **AVL on your phone.** Every AVL table now shows each row as a labeled card on a phone instead of
+  scrolling sideways: jobs, quotes, purchasing, clients, catalog, pricing, time, kits, a job's budget,
+  costing and purchasing, and the quote builder. A job's tabs become a section picker, and the
+  schedule opens on two weeks so it fits the screen.
+- **Invoices.** A job's new Invoicing tab shows the approved price, what's invoiced (and what
+  percent), collected, owed now and what's left to invoice. Make a deposit invoice; progress invoices
+  by schedule phase (each phase is a share of the contract), by percent of the contract, or line by
+  line on the budget; change-order invoices; and the final invoice, which bills exactly what's left
+  and takes off the rest of the deposit. Drafts can be edited before they go out.
+- **Getting paid.** Email the invoice to the client with a link to view, print or save a PDF.
+  Record checks, transfers and cash by hand and email a receipt. Connect your own Stripe account
+  (AVL → Business → Connections, paste your secret key) and clients pay by card; the money goes
+  straight to you and a receipt goes out on its own.
+- **Invoices page and aging.** Everything owed across jobs, what's overdue, drafts to send, and how
+  much each client owes by age (current, 1–30, 31–60, 61–90, over 90 days). Invoice terms and notes
+  are in AVL → Business.
+- **Client portal.** Clients sign in with a 6-digit code sent to their email (no password) and see
+  their proposals and change orders to sign, the project schedule, files you share, invoices to pay,
+  and messages with you. The job's new Client tab has the portal link and the messages.
+- **Selections.** Offer the client choices after the sale (a finish, a screen size, an upgrade).
+  They pick in the portal and the pick joins the job's budget at its price and cost; lock it when
+  it's final.
+- **Reports.** Pipeline, win rate, revenue by month (invoiced and collected), margin by job, unpaid
+  invoices and hours by job.
+
 ## 1.43.0
 The clock follows ProPresenter's timers, and team check-ins live only on the website, with any date, a grid and printed reports.
 - **The clock follows ProPresenter.** In Clock → ProPresenter timers, pick your ProPresenter computer

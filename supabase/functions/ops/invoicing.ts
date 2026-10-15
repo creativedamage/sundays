@@ -305,15 +305,20 @@ export async function jobBilling(jobId: string): Promise<JobBilling> {
     getAvl(), stripeConnected(),
   ]);
   const sent = invoices.filter((i) => i.status === "SENT" || i.status === "PAID");
+  // Toward the contract: budget lines and deposits, not extras typed by hand (a lift rental).
+  const sentIds = sent.map((i) => i.id);
+  const [{ c: towardContract }] = sentIds.length
+    ? await sql`select coalesce(sum(amount_cents), 0)::bigint as c from ops.job_invoice_lines where invoice_id = any(${sentIds}) and kind <> 'OTHER'`
+    : [{ c: 0 }];
   const invoiced = sent.reduce((s, i) => s + i.subtotalCents, 0);
   const deposit = basis.proposalDepositCents ?? Math.round((basis.contractCents * basis.defaultDepositBps) / 10_000);
   return {
     contractCents: basis.contractCents,
     invoicedCents: invoiced,
-    invoicedBps: basis.contractCents > 0 ? Math.round((invoiced * 10_000) / basis.contractCents) : 0,
+    invoicedBps: basis.contractCents > 0 ? Math.round((n(towardContract) * 10_000) / basis.contractCents) : 0,
     collectedCents: invoices.reduce((s, i) => s + (i.status === "VOID" ? 0 : i.paidCents), 0),
     receivableCents: sent.reduce((s, i) => s + i.balanceCents, 0),
-    toInvoiceCents: Math.max(0, basis.contractCents - invoiced),
+    toInvoiceCents: Math.max(0, basis.contractCents - n(towardContract)),
     draftCents: invoices.filter((i) => i.status === "DRAFT").reduce((s, i) => s + i.subtotalCents, 0),
     invoices, basis,
     defaults: { dueDays: n(biz.invoiceDueDays ?? 30), taxBps: await taxFor(jobId), depositCents: basis.depositBilledCents > 0 ? 0 : deposit },
