@@ -70,17 +70,17 @@ export function ClockWidget() {
 /* ── Planning Center Live ── */
 export function LiveWidget({ o }: { o: O }) {
   const next = useWeekendService((o.serviceTypeId as string) || null);
-  const data = useQuery({ queryKey: qk.runSheet(next?.id ?? ""), queryFn: () => Api.runSheet(next!.serviceTypeId, next!.id), enabled: Boolean(next), refetchInterval: 30_000 });
+  const data = useQuery({ ...planQuery(next?.serviceTypeId ?? "", next?.id ?? ""), enabled: Boolean(next), refetchInterval: 30_000 });
   const live = useQuery({ queryKey: qk.live(next?.id ?? ""), queryFn: () => Api.live(next!.serviceTypeId, next!.id), enabled: Boolean(next), refetchInterval: 3000, retry: false });
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const items = data.data?.plan.items ?? [];
+  const items = data.data?.items ?? [];
   const cur = items.find((i) => i.id === live.data?.currentItemId);
   const nxt = items.find((i) => i.id === live.data?.nextItemId);
   const el = live.data?.currentStartedAt ? Math.max(0, Math.round((now - Date.parse(live.data.currentStartedAt)) / 1000)) : null;
   const over = el != null && cur?.lengthSec ? el > cur.lengthSec : false;
   return (
-    <Frame title={next ? `Live · ${next.title}` : "Live"} icon={Radio} right={next && <Link className="text-[11px] font-normal text-accent hover:underline" href={routes.runSheet(next.serviceTypeId, next.id)}>Run sheet</Link>}>
+    <Frame title={next ? `Live · ${next.title}` : "Live"} icon={Radio} right={next && <Link className="text-[11px] font-normal text-accent hover:underline" href={routes.plan(next.serviceTypeId, next.id)}>Service</Link>}>
       {!cur ? <div className="grid h-full place-items-center text-sm text-ink-faint">Planning Center Live hasn’t started</div> : (
         <div className="flex h-full flex-col justify-center">
           <div className="text-[11px] uppercase tracking-wider text-accent">Now</div>

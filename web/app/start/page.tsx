@@ -37,8 +37,8 @@ export default function StartPage() {
           const st = v.serviceTypeId ?? (await Api.home().catch(() => null))?.serviceTypeId ?? null;
           const next = pickWeekendService(await Api.weekend(), st);
           if (!next) return router.replace("/services");
-          return router.replace(v.kind === "next-service" ? routes.plan(next.serviceTypeId, next.id)
-            : v.kind === "next-runsheet" ? routes.runSheet(next.serviceTypeId, next.id) : routes.checkins(next.serviceTypeId, next.id));
+          // (Run sheet and Check-ins were removed in 1.45: those open the service too.)
+          return router.replace(routes.plan(next.serviceTypeId, next.id));
         }
       } catch { /* fall through */ }
       router.replace("/workflows");

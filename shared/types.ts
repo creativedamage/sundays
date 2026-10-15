@@ -426,6 +426,8 @@ export interface AppSettings {
   logo: string | null;
   startView: StartView;
   waves: WavesSettings;
+  /** Teams and times hidden on the services pages, per service type id. */
+  serviceView: Record<string, ServiceViewPrefs>;
 }
 
 /* ───────────── Check-ins ───────────── */
@@ -675,7 +677,7 @@ export interface Matrix {
   plans: PlanDetail[];
 }
 
-/* ───────────── Full run sheet ───────────── */
+/* ───────────── Planning Center Live ───────────── */
 
 /** Planning Center Live for a plan: where the service is right now. */
 export interface RunSheetLive {
@@ -690,28 +692,12 @@ export interface RunSheetLive {
   canTakeControl?: boolean;
 }
 
-/** An operator view of the full run sheet: which Planning Center note categories show, in what order. */
-export interface RunSheetView {
-  id: string;
-  name: string;
-  /** Item note categories shown as columns, in this order. */
-  categories: string[];
-  /** Emphasize items that have notes in this category. */
-  highlight: string | null;
-  /** Plan-wide note categories shown at the top (null = all). */
-  planNotes: string[] | null;
-  showDescriptions: boolean;
-}
-
 export interface NoteCategory { id: string; name: string }
-
-/** Actual Live times: item id → plan time id → when it started/ended. */
-export type ItemTimes = Record<string, Record<string, { start: string | null; end: string | null }>>;
 
 export interface SongHit { id: string; title: string; author: string | null; lastScheduledAt: string | null }
 export interface SongArrangement { id: string; name: string; lengthSec: number; keys: { id: string; name: string; startingKey: string | null }[] }
 
-/** Add or change a run sheet item in Planning Center. */
+/** Add or change an item in the order of service (Planning Center). */
 export interface ItemInput {
   kind?: "song" | "header" | "media" | "item";
   title?: string;
@@ -725,12 +711,19 @@ export interface ItemInput {
   afterItemId?: string | null;
 }
 
-export interface RunSheetData {
-  plan: PlanDetail;
-  /** Plan-wide notes (e.g. "Version"). */
-  planNotes: { category: string; body: string }[];
-  fetchedAt: string;
+/** Add or change a service time (a service, a rehearsal, anything else) in Planning Center. */
+export interface PlanTimeInput {
+  name: string;
+  kind: "service" | "rehearsal" | "other";
+  startsAt: string;
+  endsAt: string;
 }
+
+/**
+ * What the services pages leave out, per service type (Settings → Services, or View on a service):
+ * teams by id, and service times by "kind|name|h:mm AM" (or "rehearsal|*" / "other|*" for every one).
+ */
+export interface ServiceViewPrefs { teams: string[]; times: string[] }
 
 /* ───────────── ProPresenter control (side screens computer, etc.) ───────────── */
 

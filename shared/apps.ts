@@ -44,7 +44,7 @@ export interface AppDef {
 }
 
 /** Path prefixes every engine app has (sign-in, start-up, settings and the pop-out screens). */
-export const SHARED_PATHS = ["/start", "/preferences", "/settings", "/setup-mode", "/runsheet", "/team", "/kiosk", "/clockout", "/displayout", "/companion", "/ops-print"];
+export const SHARED_PATHS = ["/start", "/preferences", "/settings", "/setup-mode", "/team", "/kiosk", "/clockout", "/displayout", "/companion", "/ops-print"];
 
 export const APPS: Record<AppId, AppDef> = {
   sundays: {
@@ -54,11 +54,11 @@ export const APPS: Record<AppId, AppDef> = {
   services: {
     id: "services", name: "Sundays Services", short: "Services", bundleId: "org.coolchurch.sundays.services", artifact: "Sundays-Services", kind: "engine",
     home: "/services", sections: ["/services", "/team-checkins", "/propresenter", "/clock", "/micboard", "/dashboard"],
-    blurb: "Services, run sheets, team check-ins, ProPresenter, the Clock and the Mic board.", color: "#0EA5E9", retired: "1.33.0",
+    blurb: "Services, team check-ins, ProPresenter, the Clock and the Mic board.", color: "#0EA5E9", retired: "1.33.0",
   },
   workflows: {
     id: "workflows", name: "Sundays Workflows", short: "Workflows", bundleId: "org.coolchurch.sundays.workflows", artifact: "Sundays-Workflows", kind: "engine",
-    home: "/workflows", sections: ["/workflows", "/chat"], blurb: "People workflows as boards, and Planning Center Chat.", color: "#22C55E", retired: "1.33.0",
+    home: "/workflows", sections: ["/workflows"], blurb: "People workflows as boards.", color: "#22C55E", retired: "1.33.0",
   },
   paging: {
     id: "paging", name: "Sundays Paging", short: "Paging", bundleId: "org.coolchurch.sundays.paging", artifact: "Sundays-Paging", kind: "engine",

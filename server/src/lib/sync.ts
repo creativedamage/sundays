@@ -11,7 +11,7 @@
  * at sign-in) the changes from your other Macs come down. The newest change of each setting wins.
  *
  * What syncs: Preferences (theme, logo, start-up view, Waves snapshot numbers), mics & packs and who's
- * on them, run sheet views, the Mic board / display and Clock setups, the Dashboard, campuses,
+ * on them, the Mic board / display and Clock setups, the Dashboard, campuses,
  * team groups, Parent paging, ProPresenter computers, the console, Smaart and Resi, the mic board backgrounds, and
  * the picked weekend.
  * What stays on each Mac: how it's used (Full / Service Mode / FOH Companion, and the Service Mode
@@ -24,7 +24,7 @@ import { SYNC_URL } from "../../../shared/cloud.js";
 import type { SyncStatus } from "../../../shared/types.js";
 import { usingPat } from "../config.js";
 import { decrypt } from "./crypto.js";
-import { extras, files, logEvent, mics, pagingStore, runSheetViews, settings, syncRaw, tokens as tokenStore, users } from "./db.js";
+import { extras, files, logEvent, mics, pagingStore, settings, syncRaw, tokens as tokenStore, users } from "./db.js";
 import { accessTokenFor } from "../auth/oauth.js";
 import { applyBoardSync, boardSyncValue, syncedFiles } from "./board.js";
 import { applyClockSync, clockSyncValue } from "./clock.js";
@@ -47,7 +47,6 @@ const ITEMS: Item[] = [
   { key: "micSetup", read: () => syncRaw.get("micSetup"), write: (v) => { if (v) mics.saveSetup(v as Parameters<typeof mics.saveSetup>[0]); } },
   { key: "planMics", read: () => syncRaw.get("planMics"), write: (v) => syncRaw.set("planMics", obj(v)) },
   { key: "micUsual", read: () => syncRaw.get("micUsual"), write: (v) => syncRaw.set("micUsual", obj(v)) },
-  { key: "runSheetViews", read: () => runSheetViews.list(), write: (v) => syncRaw.set("runSheetViews", Array.isArray(v) ? v : []) },
   {
     // Parent paging: ministries, messages and the iPad PINs (not which iPads are signed in here).
     key: "paging",

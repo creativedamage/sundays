@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { rememberTeams } from "./teamGroups.js";
-import { staffCheckIn, staffRows, staffUndo, teamCheckIns } from "../lib/teamCheckins.js";
+import { staffCheckIn, staffUndo, teamCheckIns } from "../lib/teamCheckins.js";
 import { z } from "zod";
 import { audit } from "../lib/db.js";
 import { lowPriority } from "../pco/client.js";
 import { checkInsDenied } from "../auth/oauth.js";
 import { SignedOutError } from "../pco/client.js";
-import type { CheckInsForPlan, PlanDetail, TeamCheckIns } from "../../../shared/types.js";
+import type { PlanDetail, TeamCheckIns } from "../../../shared/types.js";
 
 export const servicesRouter = Router();
 const h = (fn: (req: any, res: any) => Promise<unknown>) => (req: any, res: any, next: any) => fn(req, res).catch(next);
@@ -22,7 +22,7 @@ servicesRouter.get("/matrix/:st", h(async (req, res) => {
   res.json(await req.pco.getMatrix(req.params.st, weeks, past));
 }));
 
-/* ───────────── Editing the run sheet (writes to Planning Center) ───────────── */
+/* ───────────── Editing the order of service (writes to Planning Center) ───────────── */
 
 const ItemInputZ = z.object({
   kind: z.enum(["song", "header", "media", "item"]).optional(),
@@ -67,14 +67,27 @@ servicesRouter.put("/plans/:st/:plan/items/:item/notes", h(async (req, res) => {
 servicesRouter.delete("/plans/:st/:plan/items/:item/notes/:note", h(async (req, res) =>
   res.json(await req.pco.deleteItemNote(req.params.st, req.params.plan, req.params.item, req.params.note))));
 
-servicesRouter.get("/plans/:st/:plan/item-times", h(async (req, res) => res.json(await req.pco.getItemTimes(req.params.st, req.params.plan))));
-
-servicesRouter.post("/plans/:st/:plan/live/:action", h(async (req, res) => {
-  const action = z.enum(["next", "previous", "take_control"]).parse(req.params.action);
-  res.json({ live: await req.pco.liveControl(req.params.st, req.params.plan, action) });
+servicesRouter.patch("/plans/:st/:plan", h(async (req, res) => {
+  const input = z.object({ title: z.string().trim().max(255).nullable().optional(), seriesTitle: z.string().trim().max(255).nullable().optional() }).parse(req.body);
+  const plan = await req.pco.updatePlan(req.params.st, req.params.plan, input);
+  await audit(req.user.id, "plan.edit", "Plan", req.params.plan, input);
+  res.json(plan);
 }));
-
-servicesRouter.get("/plans/:st/:plan/runsheet", h(async (req, res) => res.json(await req.pco.getRunSheet(req.params.st, req.params.plan))));
+const PlanTimeZ = z.object({
+  name: z.string().trim().max(255),
+  kind: z.enum(["service", "rehearsal", "other"]),
+  startsAt: z.string().datetime({ offset: true }),
+  endsAt: z.string().datetime({ offset: true }),
+}).refine((t) => Date.parse(t.endsAt) >= Date.parse(t.startsAt), { message: "A time can't end before it starts." });
+servicesRouter.post("/plans/:st/:plan/times", h(async (req, res) => {
+  const input = PlanTimeZ.parse(req.body);
+  res.json(await req.pco.savePlanTime(req.params.st, req.params.plan, input));
+}));
+servicesRouter.put("/plans/:st/:plan/times/:time", h(async (req, res) => {
+  const input = PlanTimeZ.parse(req.body);
+  res.json(await req.pco.savePlanTime(req.params.st, req.params.plan, { ...input, id: req.params.time }));
+}));
+servicesRouter.delete("/plans/:st/:plan/times/:time", h(async (req, res) => res.json(await req.pco.deletePlanTime(req.params.st, req.params.plan, req.params.time))));
 
 servicesRouter.get("/plans/:st/:plan/live", h(async (req, res) => {
   try {
@@ -106,19 +119,6 @@ servicesRouter.post("/plans/:st/:plan/team-checkins/:person", h(async (req, res)
   else await staffCheckIn(req.pco, req.params.st, req.params.plan, person, req.user.name);
   await audit(req.user.id, undo ? "team.checkin.undo" : "team.checkin", "Person", person, { plan: req.params.plan });
   res.json(await teamCheckIns(req.pco, req.params.st, req.params.plan, (e) => checkInsDenied(req, e).message));
-}));
-
-servicesRouter.get("/plans/:st/:plan/checkins", h(async (req, res) => {
-  try {
-    const r: CheckInsForPlan = await req.pco.getCheckIns(req.params.st, req.params.plan);
-    // Staff check-ins (Sundays) show as volunteers at their area, unless Check-Ins already has them.
-    const inPco = new Set(r.rows.map((x) => x.personId).filter(Boolean));
-    const extra = staffRows(req.params.plan).filter((x) => !inPco.has(x.personId));
-    res.json({ ...r, rows: [...r.rows, ...extra].sort((a, b) => b.at.localeCompare(a.at)) });
-  } catch (e: any) {
-    if (e?.status === 403 || e?.status === 401) return res.status(403).json(checkInsDenied(req, e));
-    throw e;
-  }
 }));
 
 servicesRouter.get("/plans/:st/:plan/counts", h(async (req, res) =>

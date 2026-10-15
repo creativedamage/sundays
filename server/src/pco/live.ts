@@ -3,7 +3,7 @@
  * Endpoint notes live in docs/ARCHITECTURE.md §3.
  */
 import type { PersonProfile,
-  Board, Candidate, CheckInLocation, ItemInput, ItemTimes, Matrix, NoteCategory, RunSheetData, RunSheetLive, SongArrangement, SongHit, CheckInRow, CheckInsForPlan, Conflict, Note, PlanCounts, PlanDetail, PlanItem, PlanSummary, PlanTime, Person,
+  Board, Candidate, CheckInLocation, ItemInput, Matrix, NoteCategory, PlanTimeInput, RunSheetLive, SongArrangement, SongHit, CheckInRow, CheckInsForPlan, Conflict, Note, PlanCounts, PlanDetail, PlanItem, PlanSummary, PlanTime, Person,
   RosterStatus, ScheduleRequest, ServiceType, StaffMe, Team, TeamMember, WorkflowCard, WorkflowSummary, WorkflowShare, WorkflowShareGroup, } from "../../../shared/types.js";
 import { cache } from "../lib/db.js";
 import { computeConflicts, mapLimit, type PcoApi } from "./api.js";
@@ -408,19 +408,6 @@ export class LivePco implements PcoApi {
     return { serviceType: t, plans };
   }
 
-  async getRunSheet(st: string, planId: string): Promise<RunSheetData> {
-    const base = `${S}/service_types/${st}/plans/${planId}`;
-    const [plan, notes] = await Promise.all([
-      this.getPlan(st, planId),
-      cache.swr(this.k(`plannotes:${planId}`), 20, () => this.c.list(`${base}/notes`, 2)),
-    ]);
-    return {
-      plan,
-      planNotes: notes.map((n) => ({ category: n.category_name ?? "Note", body: n.content ?? "" })).filter((n) => n.body.trim()),
-      fetchedAt: new Date().toISOString(),
-    };
-  }
-
   async getLive(st: string, planId: string): Promise<RunSheetLive | null> {
     // Raw JSON:API here: the item each ItemTime points to is two relationships deep.
     const doc = await this.c.raw("GET", `${S}/service_types/${st}/plans/${planId}/live?include=current_item_time,next_item_time,controller`);
@@ -447,32 +434,33 @@ export class LivePco implements PcoApi {
     };
   }
 
-  async liveControl(st: string, planId: string, action: "next" | "previous" | "take_control"): Promise<RunSheetLive | null> {
-    const path = { next: "go_to_next_item", previous: "go_to_previous_item", take_control: "toggle_control" }[action];
-    await this.c.post(`${S}/service_types/${st}/plans/${planId}/live/${path}`);
-    return this.getLive(st, planId);
+  /* ───────────── Editing the service (writes to Planning Center) ───────────── */
+
+  async updatePlan(st: string, planId: string, input: { title?: string | null; seriesTitle?: string | null }) {
+    const a: Record<string, unknown> = {};
+    if (input.title !== undefined) a.title = input.title ?? "";
+    if (input.seriesTitle !== undefined) a.series_title = input.seriesTitle ?? "";
+    await this.c.patch(`${S}/service_types/${st}/plans/${planId}`, { data: { type: "Plan", id: planId, attributes: a } });
+    await this.changed(planId);
+    await cache.bust(this.k(`plans:${st}`));
+    return this.getPlan(st, planId);
   }
 
-  async getItemTimes(st: string, planId: string): Promise<ItemTimes> {
-    // Raw JSON:API: each ItemTime says which service time (plan_time) it belongs to.
-    const doc = await this.c.raw("GET", `${S}/service_types/${st}/plans/${planId}/items?include=item_times&per_page=100`);
-    const out: ItemTimes = {};
-    if (!doc) return out;
-    const inc = new Map((doc.included ?? []).map((r) => [`${r.type}:${r.id}`, r]));
-    for (const item of (Array.isArray(doc.data) ? doc.data : [doc.data])) {
-      const refs = (item.relationships?.item_times?.data ?? []) as { id: string; type: string }[];
-      for (const ref of refs) {
-        const t = inc.get(`${ref.type}:${ref.id}`);
-        const pt = (t?.relationships?.plan_time?.data as { id: string } | null)?.id;
-        const at = (t?.attributes ?? {}) as { live_start_at?: string | null; live_end_at?: string | null };
-        if (!pt || !(at.live_start_at || at.live_end_at)) continue;
-        (out[item.id] ??= {})[pt] = { start: at.live_start_at ?? null, end: at.live_end_at ?? null };
-      }
-    }
-    return out;
+  async savePlanTime(st: string, planId: string, input: PlanTimeInput & { id?: string }) {
+    const base = `${S}/service_types/${st}/plans/${planId}/plan_times`;
+    const attributes = { name: input.name, time_type: input.kind, starts_at: input.startsAt, ends_at: input.endsAt };
+    if (input.id) await this.c.patch(`${base}/${input.id}`, { data: { type: "PlanTime", id: input.id, attributes } });
+    else await this.c.post(base, { data: { type: "PlanTime", attributes } });
+    await this.changed(planId);
+    return this.getPlan(st, planId);
   }
 
-  /* ───────────── Editing the run sheet ───────────── */
+  async deletePlanTime(st: string, planId: string, timeId: string) {
+    await this.c.delete(`${S}/service_types/${st}/plans/${planId}/plan_times/${timeId}`);
+    await this.changed(planId);
+    return this.getPlan(st, planId);
+  }
+
 
   async listNoteCategories(st: string): Promise<NoteCategory[]> {
     const rows = await cache.swr(this.k(`notecats:${st}`), 600, () => this.c.list(`${S}/service_types/${st}/item_note_categories`, 2));
@@ -594,7 +582,7 @@ export class LivePco implements PcoApi {
   }
 
   /**
-   * One plan: 5 requests in parallel (plan+times, run sheet, roster, open slots; teams are cached
+   * One plan: 5 requests in parallel (plan+times, order of service, roster, open slots; teams are cached
    * for 10 min). Served from memory for 15s and shared between concurrent callers, so the
    * conflict checker and candidate list reuse it instead of downloading it again.
    */

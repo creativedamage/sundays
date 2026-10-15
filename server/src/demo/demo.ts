@@ -3,7 +3,7 @@
  * Lets every screen run without PCO credentials (DEMO_MODE=true).
  */
 import type { PersonProfile,
-  Board, Candidate, CheckInLocation, ItemInput, ItemTimes, Matrix, NoteCategory, RunSheetData, RunSheetLive, SongArrangement, SongHit, CheckInRow, CheckInsForPlan, Conflict, Note, PlanCounts, PlanDetail, PlanItem, PlanSummary, Person, RosterStatus,
+  Board, Candidate, CheckInLocation, ItemInput, Matrix, NoteCategory, PlanTimeInput, RunSheetLive, SongArrangement, SongHit, CheckInRow, CheckInsForPlan, Conflict, Note, PlanCounts, PlanDetail, PlanItem, PlanSummary, Person, RosterStatus,
   ScheduleRequest, ServiceType, StaffMe, Team, TeamMember, WorkflowCard, WorkflowShare, WorkflowShareGroup, WorkflowStep, WorkflowSummary,
 } from "../../../shared/types.js";
 import { computeConflicts, type PcoApi } from "../pco/api.js";
@@ -434,20 +434,8 @@ export class DemoPco implements PcoApi {
     return { serviceType: serviceTypes.find((t) => t.id === st) ?? { id: st, name: "Service" }, plans: await Promise.all(list.map((p) => this.getPlan(st, p.id))) };
   }
 
-  async getRunSheet(st: string, planId: string): Promise<RunSheetData> {
-    return {
-      plan: await this.getPlan(st, planId),
-      planNotes: [
-        { category: "Version", body: "v3 · updated Thursday 4:12 PM" },
-        { category: "Production", body: "Baptism video moves to after the message. Keep the stage wash at 60% for the response song." },
-      ],
-      fetchedAt: new Date().toISOString(),
-    };
-  }
-
   /**
-   * Sample Live: moves to the next item every 40 seconds, so the full run sheet can be seen
-   * following along, until someone takes control (then Next/Previous drive it).
+   * Sample Live: moves to the next item every 40 seconds, for the dashboard's Live widget.
    */
   async getLive(st: string, planId: string): Promise<RunSheetLive | null> {
     const items = this.plan(st, planId).items.filter((i) => i.kind !== "header");
@@ -462,34 +450,26 @@ export class DemoPco implements PcoApi {
     };
   }
 
-  async liveControl(st: string, planId: string, action: "next" | "previous" | "take_control"): Promise<RunSheetLive | null> {
-    const items = this.plan(st, planId).items.filter((i) => i.kind !== "header");
-    const cur = await this.getLive(st, planId);
-    const idx = Math.max(0, items.findIndex((i) => i.id === cur?.currentItemId));
-    if (action === "take_control") demoLive.set(planId, { idx, at: Date.parse(cur?.currentStartedAt ?? new Date().toISOString()) });
-    else demoLive.set(planId, { idx: Math.min(items.length - 1, Math.max(0, idx + (action === "next" ? 1 : -1))), at: Date.now() });
-    return this.getLive(st, planId);
+  async updatePlan(st: string, planId: string, input: { title?: string | null; seriesTitle?: string | null }) {
+    const p = this.plan(st, planId);
+    if (input.title !== undefined) p.title = input.title || p.dates;
+    if (input.seriesTitle !== undefined) p.seriesTitle = input.seriesTitle || null;
+    return this.getPlan(st, planId);
   }
 
-  /** Sample actual times: the first service ran a little long in places; the second is live now. */
-  async getItemTimes(st: string, planId: string): Promise<ItemTimes> {
+  async savePlanTime(st: string, planId: string, input: PlanTimeInput & { id?: string }) {
     const p = this.plan(st, planId);
-    const services = p.times.filter((t) => t.kind === "service");
-    const live = await this.getLive(st, planId);
-    const out: ItemTimes = {};
-    const wobble = (id: string, k: number) => ((Number(id) * 37 + k * 11) % 61) - 20; // seconds, -20…+40
-    services.forEach((t, si) => {
-      const pre = p.items.filter((i) => i.servicePosition === "pre").reduce((n, i) => n + i.lengthSec, 0);
-      let at = Date.parse(t.startsAt) - pre * 1000;
-      const liveIdx = si === services.length - 1 ? p.items.findIndex((i) => i.id === live?.currentItemId) : Infinity;
-      p.items.forEach((i, idx) => {
-        if (idx > liveIdx) return;
-        const len = i.kind === "header" ? 0 : Math.max(0, i.lengthSec + wobble(i.id, si));
-        (out[i.id] ??= {})[t.id] = { start: new Date(at).toISOString(), end: idx === liveIdx ? null : new Date(at + len * 1000).toISOString() };
-        at += len * 1000;
-      });
-    });
-    return out;
+    const t = input.id ? p.times.find((x) => x.id === input.id) : undefined;
+    if (t) Object.assign(t, { name: input.name, kind: input.kind, startsAt: input.startsAt, endsAt: input.endsAt });
+    else p.times.push({ id: nid(), name: input.name, kind: input.kind, startsAt: input.startsAt, endsAt: input.endsAt });
+    p.times.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return this.getPlan(st, planId);
+  }
+
+  async deletePlanTime(st: string, planId: string, timeId: string) {
+    const p = this.plan(st, planId);
+    p.times = p.times.filter((x) => x.id !== timeId);
+    return this.getPlan(st, planId);
   }
 
   async listNoteCategories(): Promise<NoteCategory[]> {

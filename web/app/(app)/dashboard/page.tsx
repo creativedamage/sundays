@@ -201,7 +201,7 @@ function OptionsModal({ w, onClose, onSave }: { w: DashboardWidget; onClose: () 
 
 /**
  * Your service: which campus (service type) the dashboard follows, in the weekend picked in the
- * sidebar. Widgets, the clock and the Live widget's Run sheet link all use it.
+ * sidebar. Widgets, the clock and the Live widget's Service link all use it.
  */
 function HomePicker() {
   const qc = useQueryClient();

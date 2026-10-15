@@ -19,7 +19,6 @@ import { updatesRouter } from "./routes/updates.js";
 import { desktopRouter } from "./routes/desktop.js";
 import { engineRouter } from "./routes/engine.js";
 import { registerLocalApp } from "./lib/engine.js";
-import { runSheetViewsRouter } from "./routes/runsheetViews.js";
 import { proRouter } from "./routes/pro.js";
 import { smaartRouter, startSmaart } from "./routes/smaart.js";
 import { dashboardRouter } from "./routes/dashboard.js";
@@ -63,7 +62,6 @@ export function createApp(webDir?: string) {
   app.use("/api/paging", requireAuth, pagingRouter);
   app.use("/api/updates", requireAuth, updatesRouter);
   app.use("/api/desktop", requireAuth, desktopRouter);
-  app.use("/api/runsheet-views", requireAuth, runSheetViewsRouter);
   app.use("/api/pro", requireAuth, proRouter);
   app.use("/api/smaart", requireAuth, smaartRouter);
   app.use("/api/dashboard", requireAuth, dashboardRouter);

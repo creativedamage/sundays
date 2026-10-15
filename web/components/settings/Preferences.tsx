@@ -204,7 +204,7 @@ function StartupSection({ s, save }: { s: AppSettings; save: Save }) {
   const plans = usePlans();
   const serviceTypes = [...new Map((plans.data ?? []).map((p) => [p.serviceTypeId, p.serviceTypeName])).entries()];
   const key = (v: StartView) => v.kind === "workflow" ? `workflow:${v.workflowId}`
-    : v.kind === "next-service" || v.kind === "next-checkins" || v.kind === "next-runsheet" ? `${v.kind}:${v.serviceTypeId ?? ""}` : v.kind;
+    : v.kind === "next-service" || v.kind === "next-checkins" || v.kind === "next-runsheet" ? `next-service:${v.serviceTypeId ?? ""}` : v.kind;
   function set(k: string) {
     const [kind, arg] = k.split(":");
     const v: StartView = kind === "workflow" ? { kind, workflowId: arg }
@@ -228,8 +228,6 @@ function StartupSection({ s, save }: { s: AppSettings; save: Save }) {
         <option value="dashboard">Dashboard</option>
         <option value="services">Services (upcoming)</option>
         {nextGroup("next-service", "The weekend’s service")}
-        {nextGroup("next-runsheet", "Run sheet")}
-        {nextGroup("next-checkins", "Check-ins")}
         <option value="workflows">Workflows overview</option>
         <optgroup label="A specific workflow">
           {workflows.data?.filter((w) => w.canOpen).map((w) => <option key={w.id} value={`workflow:${w.id}`}>{w.name}</option>)}

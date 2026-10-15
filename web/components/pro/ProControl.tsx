@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { ProAction, ProControlState, ProTimer } from "@shared/types";
 import { Api, qk } from "@/lib/api";
-import { parseLength } from "@/lib/runsheet";
+import { parseLength } from "@/lib/itemTime";
 import { Spinner } from "@/components/ui";
 
 export function useProState(id: string | null, fast = true) {

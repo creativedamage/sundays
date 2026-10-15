@@ -1,6 +1,6 @@
 "use client";
 /**
- * Add or change a run sheet item: headers, items, media, and songs from the Planning Center song
+ * Add or change an item in the order of service: headers, items, media, and songs from the Planning Center song
  * catalog (arrangement + key), with notes in any Planning Center note category. Saves to Planning
  * Center.
  */
@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { NoteCategory, PlanItem, SongHit } from "@shared/types";
 import { Api } from "@/lib/api";
-import { mmssAny, parseLength } from "@/lib/runsheet";
+import { mmssAny, parseMinutes } from "@/lib/itemTime";
 import { Modal, Spinner } from "@/components/ui";
 
 type Kind = PlanItem["kind"];
@@ -49,7 +49,7 @@ export function ItemModal({ st, planId, items, item, afterItemId, categories, on
   const noteRows = useMemo(() => categories.filter((c) => c.name), [categories]);
 
   async function submit() {
-    const len = parseLength(length);
+    const len = parseMinutes(length);
     if (len === null) return toast.error("Length should look like 4:30");
     if (kind === "song" && !editing && !song) return toast.error("Pick a song from the catalog");
     if (kind !== "song" && !title.trim()) return toast.error("Give it a title");
@@ -93,7 +93,7 @@ export function ItemModal({ st, planId, items, item, afterItemId, categories, on
   }
 
   return (
-    <Modal open onClose={onClose} width={720} title={editing ? `Edit · ${item!.title}` : "Add to the run sheet"}>
+    <Modal open onClose={onClose} width={720} title={editing ? `Edit · ${item!.title}` : "Add to the order of service"}>
       <div className="max-h-[72vh] space-y-4 overflow-y-auto p-5">
         {!editing && (
           <div className="flex gap-1.5">

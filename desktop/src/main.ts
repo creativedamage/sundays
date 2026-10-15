@@ -21,10 +21,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { createUpdater } from "./updater";
-import { createEmbed } from "./embed";
 import { ACTIVE_APP_IDS, APPS, type AppId } from "../../shared/apps";
 import { WEBSITE_URL } from "../../shared/cloud";
-import type { EmbedRequest } from "../../shared/embed";
 
 // Must match server/src/pco/registration.ts (and the redirect URIs registered with Planning Center).
 const PORTS = [47123, 47124, 47125];
@@ -125,7 +123,6 @@ if (DEF.kind === "cloud") {
 
 let win: BrowserWindow | null = null;
 let origin = "";
-let embed: ReturnType<typeof createEmbed> | null = null;
 let updater: ReturnType<typeof createUpdater> | null = null;
 /** host: runs the server; guest: uses another Sundays app's. */
 let role: "host" | "guest" | "cloud" | "none" = "none";
@@ -252,7 +249,6 @@ async function boot() {
     quit: () => app.quit(),
     log: (m) => console.log(`[updates] ${m}`),
   });
-  embed = createEmbed(() => win); // Planning Center Chat inside the window
   updater.start();
   buildMenu(updater);
 
@@ -345,8 +341,8 @@ async function hostEngine(): Promise<boolean> {
   process.once("exit", releaseLock);
   await srv.startServer({ port, webDir: path.join(__dirname, "web") });
   role = "host";
-  // This app's updater, Chat and Preferences; guests' windows reach theirs through the server.
-  srv.registerLocalApp(APP_ID, { updates: updater!, embed: embed!, prefs: (section) => openPreferences(section) });
+  // This app's updater and Preferences; guests' windows reach theirs through the server.
+  srv.registerLocalApp(APP_ID, { updates: updater!, prefs: (section) => openPreferences(section) });
   // Production clock: NDI output and the second-display window.
   startClockOutputs(origin, srv.clockOutputs);
   // Stage display (mic board / clock) on a second display.
@@ -358,7 +354,7 @@ async function hostEngine(): Promise<boolean> {
   return true;
 }
 
-/** A guest answers what the server asks of this app (Check for Updates, Chat, Preferences). */
+/** A guest answers what the server asks of this app (Check for Updates, Preferences). */
 async function guestLoop() {
   while (role === "guest" && !quitting) {
     try {
@@ -382,7 +378,6 @@ async function answer(c: { id: string; method: string; args: unknown }) {
     if (c.method === "updates.status") value = updater!.status();
     else if (c.method === "updates.check") value = await updater!.check();
     else if (c.method === "updates.install") value = await updater!.install();
-    else if (c.method === "embed.apply") value = embed!.apply(c.args as EmbedRequest);
     else if (c.method === "prefs.open") { openPreferences(String(c.args ?? "")); value = { ok: true }; }
     else throw new Error("unknown");
     await reply({ ok: true, value });
@@ -749,9 +744,6 @@ async function createWindow() {
     if (isSibling(url)) { e.preventDefault(); openSibling(url); return; }
     if (!isInApp(url)) { e.preventDefault(); void shell.openExternal(url); }
   });
-
-  // A full page load (not the app's own in-page navigation) always takes Chat off the screen.
-  w.webContents.on("did-navigate", () => embed?.apply({ action: "hide" }));
 
   const page = startPath ?? DEF.home;
   startPath = null;

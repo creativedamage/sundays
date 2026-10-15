@@ -14,7 +14,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { config } from "../config.js";
 import { KEY_ROOTS, TUNING_EXTRAS } from "../../../shared/types.js";
-import type { RunSheetView } from "../../../shared/types.js";
 import type { AppSettings, MicAssignment, MicSetup, Ministry, MinistryPaging, PagingConfig } from "../../../shared/types.js";
 
 /* ───────────── Models ───────────── */
@@ -85,8 +84,6 @@ interface Data {
   settings: AppSettings | null;
   /** Parent paging (ProPresenter) and the Kids/Nursery iPad pages. */
   paging: PagingStored | null;
-  /** Full run sheet operator views. */
-  runSheetViews: RunSheetView[];
   /** Other ProPresenter computers to watch/control, dashboard layout, Smaart. */
   extras: Record<string, unknown>;
 }
@@ -104,7 +101,7 @@ export interface PagingStored {
 
 /* ───────────── File handling ───────────── */
 
-const empty = (): Data => ({ version: 1, users: [], tokens: [], sessions: [], notes: [], audit: [], micSetup: null, planMics: {}, micUsual: {}, settings: null, paging: null, runSheetViews: [], extras: {} });
+const empty = (): Data => ({ version: 1, users: [], tokens: [], sessions: [], notes: [], audit: [], micSetup: null, planMics: {}, micUsual: {}, settings: null, paging: null, extras: {} });
 const file = () => path.resolve(process.cwd(), config.dataDir, "cool-services.json");
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomUUID();
@@ -226,7 +223,7 @@ export async function audit(actorId: string, action: string, targetType: string,
 /* ───────────── Settings ───────────── */
 
 const defaultSettings = (): AppSettings => ({
-  theme: "dark", logo: null, startView: { kind: "workflows" },
+  theme: "dark", logo: null, startView: { kind: "workflows" }, serviceView: {},
   // Nothing matched until someone enters their own SuperRack snapshot numbers.
   waves: {
     enabled: false, output: null, channel: 1, numbering: "externalId", hideFromTuning: ["Vocal Warm Ups"],
@@ -271,25 +268,8 @@ export const pagingStore = {
   },
 };
 
-/* ───────────── Run sheet views ───────────── */
-
-export const runSheetViews = {
-  list: (): RunSheetView[] => load().runSheetViews ?? [],
-  save(v: RunSheetView) {
-    const d = load();
-    d.runSheetViews = [...(d.runSheetViews ?? []).filter((x) => x.id !== v.id), v];
-    save();
-    return v;
-  },
-  remove(id: string) {
-    const d = load();
-    d.runSheetViews = (d.runSheetViews ?? []).filter((x) => x.id !== id);
-    save();
-  },
-};
-
 /** Settings sync (lib/sync.ts) reads and replaces these sections whole. */
-type SyncField = "micSetup" | "planMics" | "micUsual" | "runSheetViews";
+type SyncField = "micSetup" | "planMics" | "micUsual";
 export const syncRaw = {
   get: (k: SyncField): unknown => load()[k] ?? null,
   set(k: SyncField, v: unknown) { (load() as unknown as Record<string, unknown>)[k] = v; save(); },

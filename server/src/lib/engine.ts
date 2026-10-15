@@ -5,8 +5,8 @@
  * guest proves it's the same Mac user's Sundays with the engine key (a hash of the key in
  * ~/Library/Application Support/Sundays/key.txt, which only this Mac user can read).
  *
- * Some things only an app itself can do (its own Check for Updates, Chat inside its window,
- * Preferences in its own window). The host does them directly; a guest picks up requests for it
+ * Some things only an app itself can do (its own Check for Updates, Preferences in its own
+ * window). The host does them directly; a guest picks up requests for it
  * here (a long poll) and answers them, so the screens don't care which app hosts the server.
  */
 import crypto from "node:crypto";
@@ -14,17 +14,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ACTIVE_APP_IDS, APPS, type AppId } from "../../../shared/apps.js";
-import type { EmbedBridge, EmbedRequest } from "../../../shared/embed.js";
 import type { UpdateBridge } from "../../../shared/updates.js";
 import { config } from "../config.js";
 
 /** What an app does for its own windows. */
 export interface AppBridge {
   updates?: UpdateBridge;
-  embed?: EmbedBridge;
   prefs?: (section: string) => void;
 }
-export type AppMethod = "updates.status" | "updates.check" | "updates.install" | "embed.apply" | "prefs.open";
+export type AppMethod = "updates.status" | "updates.check" | "updates.install" | "prefs.open";
 
 /** sha256 of the engine key, what guests send as X-Sundays-Engine. */
 export const engineToken = (key = config.tokenKey) => crypto.createHash("sha256").update(`sundays-engine:${key}`).digest("hex");
@@ -112,7 +110,6 @@ async function onLocal(b: AppBridge, method: AppMethod, args: unknown): Promise<
     case "updates.status": return b.updates ? b.updates.status() : undefined;
     case "updates.check": return b.updates ? b.updates.check() : undefined;
     case "updates.install": return b.updates ? b.updates.install() : undefined;
-    case "embed.apply": return b.embed ? b.embed.apply(args as EmbedRequest) : undefined;
     case "prefs.open": b.prefs?.(String(args ?? "")); return b.prefs ? { ok: true } : undefined;
   }
 }

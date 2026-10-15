@@ -15,7 +15,7 @@ import { Logo } from "@/components/Logo";
 
 const MODES: { mode: AppMode; title: string; icon: typeof BellRing; tone: string; body: string }[] = [
   { mode: "full", title: "Full Mode", icon: LayoutDashboard, tone: "text-accent hover:border-accent/60",
-    body: "Everything: workflows, services, check-ins, run sheets, dashboard, ProPresenter, clock, mic board, paging and chat, with your Planning Center sign-in." },
+    body: "Everything: workflows, services, dashboard, ProPresenter, clock, mic board and paging, with your Planning Center sign-in." },
   { mode: "service", title: "Service Mode", icon: CalendarDays, tone: "text-ok hover:border-ok/60",
     body: "For a shared computer: only Services, ProPresenter, Clock, Mic board and Parent paging. No Workflows or Check-Ins. A PIN you choose is needed to leave it or open Preferences." },
   { mode: "companion", title: "FOH Companion", icon: BellRing, tone: "text-warn hover:border-warn/60",

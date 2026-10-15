@@ -1,8 +1,8 @@
 import type {
   WeekendView, SyncStatus,
-  AppSettings, Board, Candidate, CheckInsForPlan, Conflict, MicAssignment, MicSetup, Note, PlanCounts, PlanDetail, PlanMics, ReceiverStatus, PlanSummary, RosterStatus, ScheduleRequest,
+  AppSettings, Board, Candidate, Conflict, MicAssignment, MicSetup, Note, PlanCounts, PlanDetail, PlanMics, ReceiverStatus, PlanSummary, RosterStatus, ScheduleRequest,
   ServiceType, StaffMe, TeamMember, WorkflowCard, WorkflowSummary, WorkflowShare, WorkflowShareGroup, WorkflowAccessRequest, Person,
-  DashboardWidget, HomeService, TeamCheckIns, TeamPhonesView, TeamPhoneRole, VolunteerCheckInConfig, VolunteerCheckInSetup, TeamGroup, AppMode, AppModeView, ResiSettingsView, ResiStatus, CompanionState, CompanionStrip, CompanionTuning, DisplayInfo, CompanionInfo, Campus, CampusSettings, PersonProfile, ConsoleSettingsView, ConsolePreview, SmaartSettingsView, SmaartStatusView, ProAction, ProControlState, ProMachine, Matrix, RunSheetData, RunSheetLive, RunSheetView, ItemInput, ItemTimes, NoteCategory, PlanItem, SongArrangement, SongHit, CheckInLocation, KioskAddresses, KioskChild, Ministry, MinistryPaging, PageEvent, PagingConfig, PagingStatus, ProMessageOption, ProPresenterMachine, ProThemeOption,
+  DashboardWidget, HomeService, TeamCheckIns, TeamPhonesView, TeamPhoneRole, VolunteerCheckInConfig, VolunteerCheckInSetup, TeamGroup, AppMode, AppModeView, ResiSettingsView, ResiStatus, CompanionState, CompanionStrip, CompanionTuning, DisplayInfo, CompanionInfo, Campus, CampusSettings, PersonProfile, ConsoleSettingsView, ConsolePreview, SmaartSettingsView, SmaartStatusView, ProAction, ProControlState, ProMachine, Matrix, RunSheetLive, ItemInput, PlanTimeInput, NoteCategory, PlanItem, SongArrangement, SongHit, CheckInLocation, KioskAddresses, KioskChild, Ministry, MinistryPaging, PageEvent, PagingConfig, PagingStatus, ProMessageOption, ProPresenterMachine, ProThemeOption,
 } from "@shared/types";
 import type { UpdateStatus } from "@shared/updates";
 import type { AppId } from "@shared/apps";
@@ -115,11 +115,11 @@ export const Api = {
   plans: (serviceTypeId?: string) =>
     api<PlanSummary[]>(`/services/plans${serviceTypeId ? `?serviceTypeId=${serviceTypeId}` : ""}`),
   plan: (st: string, plan: string) => api<PlanDetail>(`/services/plans/${st}/${plan}`),
-  runSheet: (st: string, plan: string) => api<RunSheetData>(`/services/plans/${st}/${plan}/runsheet`),
   live: (st: string, plan: string) => api<{ live: RunSheetLive | null }>(`/services/plans/${st}/${plan}/live`).then((r) => r.live),
-  liveControl: (st: string, plan: string, action: "next" | "previous" | "take_control") =>
-    api<{ live: RunSheetLive | null }>(`/services/plans/${st}/${plan}/live/${action}`, { method: "POST" }).then((r) => r.live),
-  itemTimes: (st: string, plan: string) => api<ItemTimes>(`/services/plans/${st}/${plan}/item-times`),
+  editPlan: (st: string, plan: string, input: { title?: string | null; seriesTitle?: string | null }) => api<PlanDetail>(`/services/plans/${st}/${plan}`, { method: "PATCH", json: input }),
+  savePlanTime: (st: string, plan: string, input: PlanTimeInput, id?: string) =>
+    api<PlanDetail>(`/services/plans/${st}/${plan}/times${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", json: input }),
+  deletePlanTime: (st: string, plan: string, id: string) => api<PlanDetail>(`/services/plans/${st}/${plan}/times/${id}`, { method: "DELETE" }),
   noteCategories: (st: string) => api<NoteCategory[]>(`/services/types/${st}/note-categories`),
   songs: (q: string) => api<SongHit[]>(`/services/songs?q=${encodeURIComponent(q)}`),
   arrangements: (songId: string) => api<SongArrangement[]>(`/services/songs/${songId}/arrangements`),
@@ -191,12 +191,7 @@ export const Api = {
   sendConsole: (plan: string) => api<ConsolePreview>(`/console/plans/${plan}/send`, { method: "POST" }),
   saveHome: (h: HomeService) => api<HomeService>("/dashboard/home", { method: "PUT", json: h }),
   saveDashboard: (w: DashboardWidget[]) => api<DashboardWidget[]>("/dashboard", { method: "PUT", json: w }),
-  runSheetViews: () => api<RunSheetView[]>("/runsheet-views"),
-  saveRunSheetView: (v: Omit<RunSheetView, "id"> & { id?: string }) =>
-    v.id ? api<RunSheetView>(`/runsheet-views/${v.id}`, { method: "PUT", json: v }) : api<RunSheetView>("/runsheet-views", { method: "POST", json: v }),
-  deleteRunSheetView: (id: string) => api<void>(`/runsheet-views/${id}`, { method: "DELETE" }),
   matrix: (st: string, weeks: number, past: number) => api<Matrix>(`/services/matrix/${st}?weeks=${weeks}&past=${past}`),
-  checkins: (st: string, plan: string) => api<CheckInsForPlan>(`/services/plans/${st}/${plan}/checkins`),
   // Background work: the server lets requests you're waiting on (opening a service) go first.
   planCounts: (st: string, plan: string) => lowLane(() => api<PlanCounts>(`/services/plans/${st}/${plan}/counts`, { headers: { "X-Priority": "low" } })),
   candidates: (st: string, plan: string, teamId: string, position: string) =>
@@ -269,11 +264,8 @@ export const qk = {
   ipads: ["ipads"] as const,
   updates: ["updates"] as const,
   matrix: (st: string, weeks: number, past: number) => ["matrix", st, weeks, past] as const,
-  runSheet: (plan: string) => ["runSheet", plan] as const,
   live: (plan: string) => ["live", plan] as const,
-  itemTimes: (plan: string) => ["itemTimes", plan] as const,
   noteCategories: (st: string) => ["noteCategories", st] as const,
-  runSheetViews: ["runSheetViews"] as const,
   proMachines: ["proMachines"] as const,
   smaartConfig: ["smaartConfig"] as const,
   smaartStatus: ["smaartStatus"] as const,

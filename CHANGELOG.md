@@ -4,6 +4,25 @@ Each version's notes become its GitHub release notes (and what "What's new" show
 the newest version first. The line right under a version heading is its one-line summary: it names
 the GitHub Actions run and the release commit.
 
+## 1.45.0
+Edit a service's whole flow from Sundays, choose which teams and times show, and a tidier service page.
+- **Edit the service like in Planning Center.** On a service, press **Edit** on the Order of
+  service: item names, headers, lengths and descriptions change right where they are (each saves to
+  Planning Center when you leave the field). The pencil opens notes, songs, arrangements, keys and
+  before/during/after. Add items, headers, media or songs anywhere, move items up and down, and
+  delete them. While editing, the service's title and series can be changed too.
+- **Service times.** **Edit times** next to a service's times adds, changes or removes services,
+  rehearsals and other times in Planning Center.
+- **Choose what you see.** **View** on a service picks which teams and times show for that service
+  type: hide teams you don't need (they leave the roster, the counts and the Matrix) and hide
+  rehearsals, other times or a specific time. It's kept with your settings on every Mac you sign in on.
+- **Easier to find the next service.** Previous and Next at the top right are now big buttons that
+  show the date they go to.
+- **Removed: the Check-ins tab, the Run sheet and Chat.** The service page is now just the service.
+  The order of service on it replaces the full-page run sheet, and Chat is gone from the sidebar. A
+  start page set to a run sheet or check-ins opens the service instead. The Dashboard's Live widget
+  stays and links to the service.
+
 ## 1.44.0
 Sundays AVL works on phones, and bills clients: invoices, card payments, a client portal and reports.
 - **AVL on your phone.** Every AVL table now shows each row as a labeled card on a phone instead of

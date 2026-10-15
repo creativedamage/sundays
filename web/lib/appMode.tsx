@@ -19,9 +19,9 @@ export function useAppMode() {
 export const serviceLocked = (m: AppModeView | undefined) =>
   m?.mode === "service" && !(m.unlockedUntil && Date.parse(m.unlockedUntil) > Date.now());
 
-/** A page Service Mode keeps (the Services check-ins tab isn't one of them). */
+/** A page Service Mode keeps. */
 export const serviceModeAllows = (path: string) =>
-  SERVICE_MODE_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) && !path.startsWith("/services/checkins");
+  SERVICE_MODE_PAGES.some((p) => path === p || path.startsWith(`${p}/`));
 
 export const MODE_LABEL = { full: "Full Mode", service: "Service Mode", companion: "FOH Companion" } as const;
 

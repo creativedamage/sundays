@@ -2,7 +2,7 @@
  * How this Mac uses Sundays (see AppMode in shared/types.ts).
  *
  * Service Mode is for a shared computer: Services, ProPresenter, Clock, Mic board and Parent paging.
- * Workflows, Check-Ins (the services' Check-ins tab, Team check-ins), the Dashboard and Chat are
+ * Workflows, Check-Ins (Team check-ins) and the Dashboard are
  * closed, on the server as well as in the sidebar. A PIN (set when Service Mode is chosen) is needed
  * to leave Service Mode or to open Preferences; entering it unlocks everything for 15 minutes.
  */
@@ -82,12 +82,11 @@ export function unlockServiceMode(pin: string) {
 }
 export function lockServiceMode() { unlockedUntil = 0; return appModeView(); }
 
-/** API paths Service Mode closes: Workflows, Check-Ins, the Dashboard, Chat. */
+/** API paths Service Mode closes: Workflows, Check-Ins, the Dashboard. */
 const CLOSED = [
   /^\/api\/(workflows|workflow-requests)(\/|$)/,
-  /^\/api\/services\/plans\/[^/]+\/[^/]+\/(checkins|team-checkins)(\/|$)/,
+  /^\/api\/services\/plans\/[^/]+\/[^/]+\/team-checkins(\/|$)/,
   /^\/api\/(dashboard|team-groups|team-phones|volunteer-checkin)(\/|$)/,
-  /^\/api\/desktop\/embed(\/|$)/,
 ];
 export function serviceModeGuard(req: Request, res: Response, next: NextFunction) {
   if (serviceLocked() && CLOSED.some((re) => re.test(req.originalUrl.split("?")[0]))) {

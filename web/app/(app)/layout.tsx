@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { BellRing, CalendarDays, LayoutDashboard, MessageCircle, MonitorUp, KanbanSquare, Lock, LockOpen, LogOut, Settings, Timer, MicVocal } from "lucide-react";
+import { BellRing, CalendarDays, LayoutDashboard, MonitorUp, KanbanSquare, Lock, LockOpen, LogOut, Settings, Timer, MicVocal } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -85,7 +85,6 @@ function Shell({ children }: { children: React.ReactNode }) {
     { href: "/propresenter", label: "ProPresenter", icon: MonitorUp },
     { href: "/clock", label: "Clock", icon: Timer },
     { href: "/micboard", label: "Mic board", icon: MicVocal },
-    { href: "/chat", label: "Chat", icon: MessageCircle },
     { href: "/paging", label: "Parent paging", icon: BellRing },
   ];
 
@@ -130,7 +129,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <OpsNav />
         ) : path.startsWith("/paging") ? (
           <PagingNav />
-        ) : path.startsWith("/chat") || path.startsWith("/propresenter") || path.startsWith("/dashboard") || path.startsWith("/team-checkins") || path.startsWith("/clock") || path.startsWith("/micboard") ? (
+        ) : path.startsWith("/propresenter") || path.startsWith("/dashboard") || path.startsWith("/team-checkins") || path.startsWith("/clock") || path.startsWith("/micboard") ? (
           <div className="flex-1" />
         ) : path.startsWith("/settings") ? (
           <div className="flex-1" />
@@ -205,8 +204,7 @@ function Shell({ children }: { children: React.ReactNode }) {
  * (or every service type, grouped, on the Services overview).
  */
 function ServicesNav({ activeSt, activePlan, tab }: { activeSt: string | null; activePlan: string | null; tab: string }) {
-  // Stay on the same tab (Plan / Check-ins) when switching services.
-  const link = tab === "/services/checkins" ? routes.checkins : routes.plan;
+  const link = routes.plan;
   const qc = useQueryClient();
   const plans = usePlans();
   const list = plans.data ?? [];
@@ -338,7 +336,7 @@ function ServiceModeBox({ locked, unlockedUntil }: { locked: boolean; unlockedUn
   );
 }
 
-/** A page Service Mode closes (Workflows, Check-Ins, Dashboard, Chat). */
+/** A page Service Mode closes (Workflows, Check-Ins, Dashboard). */
 function ClosedInServiceMode() {
   const unlock = useUnlock();
   return (

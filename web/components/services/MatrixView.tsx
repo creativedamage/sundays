@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { PlanDetail, TeamMember } from "@shared/types";
+import { useServiceView, visiblePlan } from "@/lib/serviceView";
 import { Api, qk } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { tuningSongs } from "@/lib/waves";
@@ -46,7 +47,9 @@ export function MatrixView({ serviceTypeId }: { serviceTypeId: string }) {
   const m = useQuery({ queryKey: key, queryFn: () => Api.matrix(serviceTypeId, weeks, past), placeholderData: (prev) => prev, refetchInterval: 60_000 });
   const setW = (n: number) => { setWeeks(n); try { localStorage.setItem("coolservices.matrix.weeks", String(n)); } catch { /* ignore */ } };
 
-  const plans = m.data?.plans ?? [];
+  // Teams and times hidden for this service type (View on a service) stay out of the Matrix too.
+  const view = useServiceView(serviceTypeId);
+  const plans = (m.data?.plans ?? []).map((p) => visiblePlan(p, view.prefs));
   const now = Date.now();
   const settings = useQuery({ queryKey: qk.settings, queryFn: Api.settings, staleTime: 60_000 });
   const refresh = (planIds: string[]) => {
