@@ -8,7 +8,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { ClockPreset, ClockView } from "../../../shared/clock.js";
 import {
-  clockAct, clockPresets, clockSettings, clockState, clockStatus, onClockChange, saveClockPresets, saveClockSettings, setClockOwner, type ClockAction,
+  clockAct, clockPresets, clockProMachines, clockProStatus, clockSettings, clockState, clockStatus, onClockChange, saveClockPresets, saveClockSettings, setClockOwner, type ClockAction,
 } from "../lib/clock.js";
 import { kioskAddresses } from "./paging.js";
 
@@ -30,6 +30,7 @@ const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("colors"), warnSec: z.number().int().min(0).max(36000), dangerSec: z.number().int().min(0).max(36000) }),
   z.object({ type: z.literal("info"), title: z.string().max(60).optional(), subtitle: z.string().max(80).optional(), hidden: z.boolean().optional() }),
   z.object({ type: z.literal("style"), timerColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), messagePosition: z.enum(["bottom", "top", "full"]).optional() }),
+  z.object({ type: z.literal("follow"), on: z.boolean() }),
 ]);
 const Preset = z.object({
   id: z.string().regex(/^[\w-]{1,40}$/), name: z.string().trim().min(1).max(60), main: Spec, secondary: Spec.nullable(), message: z.string().max(200),
@@ -48,16 +49,24 @@ const addrs = () => {
 export const clockRouter = Router();
 clockRouter.use((req: any, _res, next) => { if (req.user) setClockOwner({ userId: req.user.id, demo: Boolean(req.demo) }); next(); });
 clockRouter.get("/", (_req, res) => {
-  const v: ClockView = { state: clockState(), presets: clockPresets(), settings: clockSettings(), status: clockStatus(), urls: addrs() };
+  const v: ClockView = { state: clockState(), presets: clockPresets(), settings: clockSettings(), status: clockStatus(), urls: addrs(), pro: clockProStatus(), proMachines: clockProMachines() };
   res.json(v);
 });
-clockRouter.post("/action", (req, res) => res.json(clockAct(Action.parse(req.body) as ClockAction)));
+clockRouter.post("/action", (req, res) => {
+  try { res.json(clockAct(Action.parse(req.body) as ClockAction)); }
+  catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status) return res.status(status).json({ error: "clock", message: (e as Error).message });
+    throw e;
+  }
+});
 clockRouter.put("/presets", (req, res) => res.json(saveClockPresets(z.array(Preset).max(200).parse(req.body) as ClockPreset[])));
 clockRouter.put("/settings", (req, res) => {
   const p = z.object({
     ndi: z.object({ enabled: z.boolean(), name: z.string().trim().min(1).max(60), resolution: z.enum(["720p", "1080p"]), fps: z.union([z.literal(25), z.literal(30), z.literal(50), z.literal(60)]), transparent: z.boolean() }).partial(),
     screen: z.object({ enabled: z.boolean(), displayId: z.number().nullable() }).partial(),
     showTimeOfDay: z.boolean(), lan: z.boolean(), title: z.string().max(40), infoHeading: z.string().max(30),
+    pro: z.object({ machineId: z.string().max(60).nullable(), main: z.string().max(80), aux: z.string().max(80), resumeOnStart: z.boolean() }).partial(),
   }).partial().parse(req.body);
   res.json(saveClockSettings(p as any));
 });
@@ -87,7 +96,7 @@ clockOutRouter.get("/stream", (req: Request, res: Response) => {
  * Stream Deck / Companion: GET or POST /api/clock-out/control/<key>/<action>[/<value>]
  * start · pause · toggle · reset · next · prev · blank · unblank · add/<seconds> · load/<preset name or number>
  * secondary-start · secondary-pause · secondary-toggle · secondary-reset · message/<text> · clear-message
- * info/<title> · subtitle/<text>
+ * info/<title> · subtitle/<text> · follow-pro (show ProPresenter's timers) · manual (stop following)
  */
 clockOutRouter.all("/control/:key/:action/:value?", (req, res) => {
   if (req.params.key !== clockSettings().controlKey) return res.status(403).json({ error: "wrong_key", message: "That control key isn’t right. Copy the links again from Preferences → Clock." });
@@ -98,6 +107,7 @@ clockOutRouter.all("/control/:key/:action/:value?", (req, res) => {
   if (sec) a = { type: sec[1] as "start", which: "secondary" };
   else if (["start", "pause", "toggle", "reset", "next", "prev"].includes(act)) a = { type: act as "start" };
   else if (act === "blank" || act === "unblank") a = { type: "blank", on: act === "blank" };
+  else if (act === "follow-pro" || act === "manual") a = { type: "follow", on: act === "follow-pro" };
   else if (act === "add") a = { type: "add", sec: Number(v) || 0 };
   else if (act === "message") a = { type: "message", text: v };
   else if (act === "clear-message") a = { type: "message", text: "" };
@@ -110,6 +120,7 @@ clockOutRouter.all("/control/:key/:action/:value?", (req, res) => {
     a = { type: "load", presetId: p.id, start: req.query.start === "0" ? false : true };
   }
   if (!a) return res.status(400).json({ error: "unknown_action" });
-  const s = clockAct(a);
+  let s;
+  try { s = clockAct(a); } catch (e) { return res.status((e as { status?: number }).status ?? 500).json({ error: "clock", message: (e as Error).message }); }
   res.json({ ok: true, preset: s.presetName, running: s.main.running });
 });

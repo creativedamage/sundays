@@ -45,6 +45,8 @@ export interface CheckinMe {
 }
 
 export interface CheckinService { id: string; serviceTypeId: string; serviceTypeName: string; title: string; sortDate: string }
+/** GET /checkin/services: last week's and upcoming services (or one day's), and today in the church's time zone. */
+export interface CheckinServices { services: CheckinService[]; today: string }
 
 export interface CheckinPerson {
   personId: string; name: string; avatarUrl: string | null; positions: string[]; status: "C" | "U" | "D";
@@ -73,9 +75,11 @@ export interface CheckinConfig {
   teamLocations: Record<string, { id: string; name: string }>;
   groups: CheckinGroup[];
 }
+export interface CheckinLocation { id: string; name: string; folder: string | null }
 export interface CheckinSetup {
   config: CheckinConfig;
   serviceTypes: { id: string; name: string; teams: { id: string; name: string }[] }[];
-  events: { id: string; name: string; locations: { id: string; name: string; folder: string | null }[] }[];
+  /** Check-Ins events. `locations` is null until loaded (GET /checkin/setup/locations?event=). */
+  events: { id: string; name: string; locations: CheckinLocation[] | null }[];
   eventsError: string | null;
 }

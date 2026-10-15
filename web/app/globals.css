@@ -125,6 +125,7 @@ body {
 
 @media print {
   @page { size: landscape; margin: 0.4in; }
+  @page checkin { size: portrait; margin: 0.5in; }
   html, body { background: #fff !important; color-scheme: light !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* keep card colors */
   body * { visibility: hidden; }
@@ -137,6 +138,12 @@ body {
   /* Sundays | Operations proposal: portrait, the whole document, page after page. */
   body:has(.ops-proposal) * { visibility: visible !important; }
   .ops-proposal { page: proposal; }
+
+  /* Team check-in report: portrait, page after page, with its own lines. */
+  .checkin-report.print-area { position: static; inset: auto; }
+  html:has(.checkin-report), body:has(.checkin-report) { height: auto !important; min-height: 0 !important; }
+  body:has(.checkin-report) > :not(:has(.checkin-report)):not(.checkin-report) { display: none !important; }
+  .checkin-report { page: checkin; }
 
   /* Full run sheet: print the whole sheet as a plain table. */
   body:has(.runsheet) * { visibility: visible !important; }

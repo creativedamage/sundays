@@ -8,13 +8,15 @@
  * (Operations → Settings → People). Each check-in records who made it.
  */
 import clsx from "clsx";
-import { Check, ChevronDown, LogOut, MapPin, RefreshCw, Search, Settings2, ShieldCheck, UsersRound, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, LogOut, MapPin, Printer, RefreshCw, Search, Settings2, ShieldCheck, UsersRound, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CheckinMe, CheckinPerson, CheckinPlanData, CheckinService, CheckinTeam } from "@shared/ops/checkin";
+import type { CheckinMe, CheckinPerson, CheckinPlanData, CheckinService } from "@shared/ops/checkin";
 import { checkinAtLeast } from "@shared/ops/checkin";
 import { CheckinApi, CheckinError, claimSignIn, clearPending, pending, startSignIn, token } from "@/lib/checkin";
 import { PCO_LOGO_SRC } from "@/components/PlanningCenterButton";
 import { CheckinSettings } from "./CheckinSettings";
+import { CheckinReport } from "./Report";
+import { groupTeams, tally } from "./sections";
 import { AppMark, Centered, Face, Sheet, Shell } from "./ui";
 
 const LS = "sundays.checkin";
@@ -119,7 +121,7 @@ function Waiting({ onDone }: { onDone: () => void }) {
 /* ───────────── Teams ───────────── */
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-const count = (list: CheckinTeam[]) => ({ inn: list.reduce((n, x) => n + x.people.filter((p) => p.checkedInAt).length, 0), all: list.reduce((n, x) => n + x.people.length, 0) });
+const count = tally;
 
 function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: string) => void }) {
   const canCheck = checkinAtLeast(me.level, "CHECKIN");
@@ -135,6 +137,10 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [report, setReport] = useState(false);
+  /** A day picked with the date filter ("YYYY-MM-DD"); null = last week's and upcoming services. */
+  const [date, setDate] = useState<string | null>(null);
+  const [today, setToday] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fail = useCallback((e: unknown) => {
@@ -142,15 +148,21 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
     setError((e as Error).message);
   }, [onSignedOut]);
 
-  // Upcoming services (refreshed every few minutes); the chosen one, else the first.
+  // Last week's and upcoming services, or a picked day's (refreshed every few minutes). Keeps the
+  // chosen service while it's in the list; otherwise the one happening now or next, else the latest.
   const loadServices = useCallback(async () => {
     try {
-      const r = await CheckinApi.services();
+      const r = await CheckinApi.services(date ?? undefined);
       setServices(r.services);
-      setPlan((p) => (p && r.services.some((s) => s.id === p) ? p : r.services[0]?.id ?? null));
+      setToday(r.today);
+      setPlan((p) => {
+        if (p && r.services.some((s) => s.id === p)) return p;
+        const soon = r.services.find((s) => Date.parse(s.sortDate) > Date.now() - 8 * 3600e3);
+        return (date ? r.services[0] : soon ?? r.services[r.services.length - 1])?.id ?? null;
+      });
     } catch (e) { fail(e); }
-  }, [fail]);
-  useEffect(() => { void loadServices(); const x = setInterval(loadServices, 5 * 60_000); return () => clearInterval(x); }, [loadServices]);
+  }, [fail, date]);
+  useEffect(() => { setServices(null); void loadServices(); const x = setInterval(loadServices, 5 * 60_000); return () => clearInterval(x); }, [loadServices]);
   const service = services?.find((s) => s.id === plan) ?? null;
 
   const fetchData = useCallback(async () => {
@@ -176,19 +188,8 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
     flashTimer.current = setTimeout(() => setFlash(null), 3500);
   };
 
-  const teams = d?.teams ?? [];
-  const sections = useMemo(() => {
-    const byId = new Map(teams.map((x) => [x.teamId, x]));
-    const used = new Set<string>();
-    const out = (d?.groups ?? []).map((g) => {
-      const list = g.teamIds.map((id) => byId.get(id)).filter((x): x is CheckinTeam => Boolean(x));
-      list.forEach((x) => used.add(x.teamId));
-      return { id: g.id, name: g.name, teams: list };
-    }).filter((s) => s.teams.length);
-    const rest = teams.filter((x) => !used.has(x.teamId));
-    if (rest.length) out.push({ id: "other", name: out.length ? "Other teams" : "Teams", teams: rest });
-    return out;
-  }, [teams, d?.groups]);
+  const teams = useMemo(() => d?.teams ?? [], [d?.teams]);
+  const sections = useMemo(() => groupTeams(teams, d?.groups ?? []), [teams, d?.groups]);
   const shown = ministry === "all" ? sections : sections.filter((s) => s.id === ministry);
   const total = count(shown.flatMap((s) => s.teams));
 
@@ -231,8 +232,10 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
   const toggle = (id: string) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: me.timeZone });
   const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: me.timeZone });
+  const dayOf = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: me.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 
   if (settings) return <CheckinSettings onClose={(changed) => { setSettings(false); if (changed) void fetchData(); }} />;
+  if (report && service) return <CheckinReport me={me} service={service} data={d} onClose={() => setReport(false)} />;
 
   return (
     <Shell>
@@ -243,18 +246,32 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
             {me.logo ? <img src={me.logo} alt="" className="h-6 w-6 shrink-0 rounded-md object-contain" /> : <AppMark size={22} />}
             <span className="truncate">{me.church}</span>
           </div>
-          <button className="btn-ghost ml-auto shrink-0 p-1.5" aria-label="Refresh" onClick={() => { void loadServices(); void fetchData(); }}><RefreshCw size={17} className={clsx(loading && "animate-spin")} /></button>
+          <button className="btn-ghost ml-auto shrink-0 p-1.5" aria-label="Print a report" title="Print a report" disabled={!service} onClick={() => setReport(true)}><Printer size={17} /></button>
+          <button className="btn-ghost shrink-0 p-1.5" aria-label="Refresh" onClick={() => { void loadServices(); void fetchData(); }}><RefreshCw size={17} className={clsx(loading && "animate-spin")} /></button>
           <button className="shrink-0 rounded-full" aria-label="You" onClick={() => setMenu(true)}><Face name={me.name} src={me.avatarUrl} size={30} /></button>
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <h1 className="text-xl font-semibold">Team check-ins</h1>
           {d && <span className="font-mono text-lg tabular-nums"><b className="text-ok">{total.inn}</b><span className="text-ink-muted">/{total.all}</span></span>}
         </div>
-        {services && services.length > 0 && (
-          <select className="input mt-2 w-full py-2 text-[16px]" value={plan ?? ""} onChange={(e) => setPlan(e.target.value)}>
-            {services.map((s) => <option key={s.id} value={s.id}>{day(s.sortDate)} · {clock(s.sortDate)} · {s.serviceTypeName}</option>)}
-          </select>
-        )}
+        <div className="mt-2 flex gap-2">
+          <label className={clsx("relative flex shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm", date ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-soft")} title="Pick a date">
+            <CalendarDays size={16} />
+            <span className="hidden sm:inline">{date ? day(`${date}T12:00:00Z`) : "Any date"}</span>
+            <input type="date" aria-label="Service date" className="absolute inset-0 cursor-pointer opacity-0" value={date ?? ""}
+              onChange={(e) => { const v = e.target.value; setDate(v && v !== "" ? v : null); }} />
+          </label>
+          {services && services.length > 0 ? (
+            <select className="input min-w-0 flex-1 py-2 text-[16px]" value={plan ?? ""} onChange={(e) => setPlan(e.target.value)}>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>{day(s.sortDate)} · {clock(s.sortDate)} · {s.serviceTypeName}{today && dayOf(s.sortDate) < today ? " (past)" : ""}</option>
+              ))}
+            </select>
+          ) : (
+            <div className="input flex min-w-0 flex-1 items-center py-2 text-[16px] text-ink-muted">{services ? (date ? "No services that day" : "No services") : "Loading services…"}</div>
+          )}
+          {date && <button className="btn-ghost shrink-0 px-2 text-sm" onClick={() => setDate(null)}>This week</button>}
+        </div>
         {sections.length > 1 && (
           <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
             {[{ id: "all", name: "All" }, ...sections].map((s) => (
@@ -282,7 +299,7 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
             <span className="shrink-0 font-semibold text-accent">Set up</span>
           </button>
         )}
-        {services && !services.length && <p className="py-10 text-center text-ink-muted">No upcoming services you can see in Planning Center.</p>}
+        {services && !services.length && <p className="py-10 text-center text-ink-muted">{date ? "No services you can see in Planning Center that day. Pick another date." : "No services you can see in Planning Center this week."}</p>}
         {!services && !error && <Skeletons />}
         {service && !d && !error && <Skeletons />}
         {d && !teams.length && <p className="py-10 text-center text-ink-muted">Nobody you can see is scheduled on this service yet.</p>}
@@ -303,7 +320,7 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
                 <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">{s.name}</h2>
                 <span className="font-mono text-sm tabular-nums text-ink-soft">{c.inn}/{c.all}</span>
               </div>
-              <div className="space-y-2.5">
+              <div className="grid items-start gap-2.5 md:grid-cols-2 xl:grid-cols-3">
                 {s.teams.map((x) => {
                   const inn = x.people.filter((p) => p.checkedInAt).length;
                   const all = x.people.length;
@@ -358,6 +375,7 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
             </div>
           </div>
           <div className="mt-5 grid gap-2">
+            <button className="btn-outline justify-center py-3" disabled={!service} onClick={() => { setMenu(false); setReport(true); }}><Printer size={16} /> Print a report</button>
             {checkinAtLeast(me.level, "MANAGER") && (
               <button className="btn-outline justify-center py-3" onClick={() => { setMenu(false); setSettings(true); }}><Settings2 size={16} /> Check-in settings</button>
             )}
@@ -371,7 +389,7 @@ function Teams({ me, onSignedOut }: { me: CheckinMe; onSignedOut: (error?: strin
 }
 
 function Skeletons() {
-  return <div className="space-y-2.5">{Array.from({ length: 4 }, (_, i) => <div key={i} className="h-[72px] animate-pulse rounded-2xl border border-line bg-surface" />)}</div>;
+  return <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[72px] animate-pulse rounded-2xl border border-line bg-surface" />)}</div>;
 }
 
 function PersonRow({ p, sub, canCheck, busy, onCheckIn }: { p: CheckinPerson; sub: string; canCheck: boolean; busy: boolean; onCheckIn: (p: CheckinPerson, undo?: boolean) => void }) {

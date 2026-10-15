@@ -6,7 +6,7 @@ import type {
 } from "@shared/types";
 import type { UpdateStatus } from "@shared/updates";
 import type { AppId } from "@shared/apps";
-import type { ClockOutputSettings, ClockPreset, ClockState, ClockView } from "@shared/clock";
+import type { ClockOutputSettings, ClockPreset, ClockProSettings, ClockState, ClockView } from "@shared/clock";
 import type { BoardBackground, BoardMic, BoardSettings, DisplayState, LogoRule } from "@shared/board";
 
 export type SettingsPatch = Partial<Omit<AppSettings, "waves">> & {
@@ -109,7 +109,7 @@ export const Api = {
   clock: () => api<ClockView>("/clock"),
   clockAction: (a: Record<string, unknown> & { type: string }) => api<ClockState>("/clock/action", { method: "POST", json: a }),
   saveClockPresets: (list: ClockPreset[]) => api<ClockPreset[]>("/clock/presets", { method: "PUT", json: list }),
-  saveClockSettings: (p: { ndi?: Partial<ClockOutputSettings["ndi"]>; screen?: Partial<ClockOutputSettings["screen"]>; showTimeOfDay?: boolean; lan?: boolean; title?: string; infoHeading?: string }) =>
+  saveClockSettings: (p: { ndi?: Partial<ClockOutputSettings["ndi"]>; screen?: Partial<ClockOutputSettings["screen"]>; showTimeOfDay?: boolean; lan?: boolean; title?: string; infoHeading?: string; pro?: Partial<ClockProSettings> }) =>
     api<ClockOutputSettings>("/clock/settings", { method: "PUT", json: p }),
   newClockKey: () => api<ClockOutputSettings>("/clock/settings/new-key", { method: "POST" }),
   plans: (serviceTypeId?: string) =>
@@ -142,6 +142,7 @@ export const Api = {
   teamCheckIns: (st: string, plan: string) => api<TeamCheckIns>(`/services/plans/${st}/${plan}/team-checkins`),
   staffCheckIn: (st: string, plan: string, personId: string, undo?: boolean) =>
     api<TeamCheckIns>(`/services/plans/${st}/${plan}/team-checkins/${personId}`, { method: "POST", json: { undo } }),
+  volunteerConfig: () => api<VolunteerCheckInSetup["config"]>("/volunteer-checkin/config"),
   volunteerSetup: (serviceTypeIds?: string[]) => api<VolunteerCheckInSetup>(`/volunteer-checkin${serviceTypeIds?.length ? `?st=${serviceTypeIds.join(",")}` : ""}`),
   saveVolunteerConfig: (serviceTypes: { id: string; event: { id: string; name: string } | null; teams: { id: string; location: { id: string; name: string } | null }[] }[]) =>
     api<VolunteerCheckInConfig>("/volunteer-checkin", { method: "PUT", json: { serviceTypes } }),

@@ -8,9 +8,11 @@
  */
 import crypto from "node:crypto";
 import {
-  DEFAULT_LABEL, DEFAULT_TIMER_COLOR, nextAt, readClock, type MessagePosition,
-  type ClockOutputSettings, type ClockPreset, type ClockState, type ClockStatusView, type ClockTimerSpec, type ClockTimerState,
+  DEFAULT_LABEL, DEFAULT_PRO_SETTINGS, DEFAULT_TIMER_COLOR, nextAt, readClock, type MessagePosition,
+  type ClockOutputSettings, type ClockPreset, type ClockProStatus, type ClockProTimer, type ClockState, type ClockStatusView, type ClockTimerSpec, type ClockTimerState,
 } from "../../../shared/clock.js";
+import { ProPresenter } from "./propresenter.js";
+import { machines as proMachines } from "../routes/pro.js";
 import { pcoForUser } from "../auth/oauth.js";
 import { followPlans, onWeekendChange, weekend, weekendPlans } from "./weekend.js";
 import type { PcoApi } from "../pco/api.js";
@@ -27,6 +29,7 @@ const defaultSettings = (): ClockOutputSettings => ({
   infoHeading: "INFORMATION",
   showTimeOfDay: true,
   controlKey: crypto.randomBytes(4).toString("hex"),
+  pro: { ...DEFAULT_PRO_SETTINGS },
 });
 const blankTimer = (): ClockTimerState => ({ mode: "countdown", label: "Countdown", running: false, startedAt: null, elapsedMs: 0, durationMs: 300_000, targetAt: null, overtime: true });
 const blankState = (): ClockState => ({
@@ -37,6 +40,7 @@ function load(): Stored {
   const settings = { ...defaultSettings(), ...s.settings } as ClockOutputSettings;
   settings.ndi = { ...defaultSettings().ndi, ...s.settings?.ndi };
   settings.screen = { ...defaultSettings().screen, ...s.settings?.screen };
+  settings.pro = { ...DEFAULT_PRO_SETTINGS, ...s.settings?.pro };
   if (!s.settings?.controlKey) extras.set(KEY, { ...s, settings });
   return { presets: s.presets ?? [], settings, state: s.state ?? null, owner: s.owner ?? null };
 }
@@ -89,8 +93,14 @@ export const clockStatus = () => status;
 
 export function saveClockSettings(patch: Partial<ClockOutputSettings>) {
   const cur = stored.settings;
-  stored.settings = { ...cur, ...patch, ndi: { ...cur.ndi, ...patch.ndi }, screen: { ...cur.screen, ...patch.screen } };
+  stored.settings = { ...cur, ...patch, ndi: { ...cur.ndi, ...patch.ndi }, screen: { ...cur.screen, ...patch.screen }, pro: { ...cur.pro, ...patch.pro } };
   persist();
+  if (patch.pro) {
+    // A different computer or different timers: start over, and stop following when it's switched off.
+    seen.clear(); kindsAt = 0; pick = { main: null, aux: null };
+    if (!stored.settings.pro.machineId && state.source === "propresenter") state = { ...state, source: "manual", presetName: null };
+    void pollPro();
+  }
   for (const fn of settingsListeners) fn(stored.settings);
   changed(false); // outputs re-read showTimeOfDay / transparency
   return stored.settings;
@@ -155,7 +165,8 @@ export type ClockAction =
   | { type: "next" | "prev" }
   | { type: "colors"; warnSec: number; dangerSec: number }
   | { type: "info"; title?: string; subtitle?: string; hidden?: boolean }
-  | { type: "style"; timerColor?: string; messagePosition?: MessagePosition };
+  | { type: "style"; timerColor?: string; messagePosition?: MessagePosition }
+  | { type: "follow"; on: boolean };
 
 let mainEnded = false;
 const presetById = (id: string | null) => stored.presets.find((p) => p.id === id) ?? null;
@@ -180,6 +191,15 @@ function loadPreset(p: ClockPreset, start?: boolean) {
 export function clockAct(a: ClockAction): ClockState {
   const now = Date.now();
   const which = "which" in a && a.which === "secondary" ? "secondary" : "main";
+  // Following ProPresenter: start, pause, reset and ± run its timer (it shows up here on the next look).
+  if (state.source === "propresenter" && (a.type === "start" || a.type === "pause" || a.type === "toggle" || a.type === "reset" || a.type === "add")) {
+    const uuid = which === "main" ? proStatus.mainUuid : proStatus.auxUuid;
+    if (uuid) { void proTimerAct(uuid, a); return clockState(); }
+  }
+  // A saved timer or one set here takes over from ProPresenter.
+  if (a.type === "load" || a.type === "set" || a.type === "next" || a.type === "prev") {
+    if (state.source === "propresenter" && !(a.type === "set" && which === "secondary")) state = { ...state, source: "manual", presetName: null };
+  }
   const on = (fn: (t: ClockTimerState) => ClockTimerState) => {
     if (which === "secondary") { if (state.secondary) state = { ...state, secondary: fn(state.secondary) }; }
     else state = { ...state, main: fn(state.main) };
@@ -217,6 +237,14 @@ export function clockAct(a: ClockAction): ClockState {
     case "colors": state = { ...state, warnSec: Math.max(0, a.warnSec), dangerSec: Math.max(0, a.dangerSec) }; break;
     case "info": state = { ...state, info: { title: (a.title ?? state.info.title).slice(0, 60), subtitle: (a.subtitle ?? state.info.subtitle).slice(0, 80), hidden: a.hidden ?? state.info.hidden } }; break;
     case "style": state = { ...state, timerColor: a.timerColor ?? state.timerColor, messagePosition: a.messagePosition ?? state.messagePosition }; break;
+    case "follow": {
+      if (!a.on) { if (state.source === "propresenter") state = { ...state, source: "manual", presetName: null }; break; }
+      if (!stored.settings.pro.machineId) throw Object.assign(new Error("Choose a ProPresenter computer first (Clock → ProPresenter)."), { status: 400 });
+      state = { ...state, source: "propresenter", presetId: null, presetName: "ProPresenter", blank: false };
+      mainEnded = false;
+      applyPro(now, true);
+      break;
+    }
     case "load": {
       const p = presetById(a.presetId);
       if (!p) throw Object.assign(new Error("That timer isn’t saved any more."), { status: 404 });
@@ -306,6 +334,164 @@ async function refreshPco(force = false) {
   if (any) changed(false);
 }
 
+/* ───────────── ProPresenter timers ───────────── */
+
+const blankProStatus = (): ClockProStatus => ({ machineName: null, connected: false, error: null, timers: [], mainUuid: null, auxUuid: null });
+let proStatus: ClockProStatus = blankProStatus();
+export const clockProStatus = () => proStatus;
+export const clockProMachines = () => proMachines().map((m) => ({ id: m.id, name: m.name }));
+
+type ProKind = ClockProTimer["kind"];
+/**
+ * What we last saw of each ProPresenter timer. `at` is our best estimate of when its value last
+ * ticked over (a second boundary): each tick happened between two looks, and since a running timer
+ * ticks every 1000 ms, the windows from several ticks narrow it down to a few milliseconds.
+ */
+interface ProSeen { uuid: string; name: string; kind: ProKind; sec: number; running: boolean; at: number; lo: number; hi: number }
+const seen = new Map<string, ProSeen>();
+let kinds = new Map<string, ProKind>();
+let kindsAt = 0;
+/** The timers on the clock, kept while they exist so they don't jump between ProPresenter timers. */
+let pick: { main: string | null; aux: string | null } = { main: null, aux: null };
+let proBusy = false;
+let lastLook = 0;
+
+/** "00:04:32" / "-00:00:05" → seconds (negative = over). */
+const proSeconds = (t: string) => {
+  const neg = t.trim().startsWith("-");
+  const v = t.replace("-", "").split(":").map((x) => Number(x) || 0).reduce((a, b) => a * 60 + b, 0);
+  return neg ? -v : v;
+};
+
+function proFor(id: string | null) {
+  const m = id ? proMachines().find((x) => x.id === id) : null;
+  return m ? { pro: new ProPresenter(m.host, m.port), name: m.name } : null;
+}
+
+async function proTimerAct(uuid: string, a: ClockAction) {
+  const p = proFor(stored.settings.pro.machineId);
+  if (!p) return;
+  const e = encodeURIComponent(uuid);
+  const running = seen.get(uuid)?.running ?? false;
+  try {
+    if (a.type === "add") await p.pro.api("GET", `/v1/timer/${e}/increment/${Math.round(a.sec)}`);
+    else {
+      const op = a.type === "toggle" ? (running ? "stop" : "start") : a.type === "pause" ? "stop" : a.type;
+      await p.pro.api("GET", `/v1/timer/${e}/${op}`);
+    }
+    await pollPro();
+  } catch (err) { console.warn(`[clock] ProPresenter timer ${a.type}: ${(err as Error).message}`); }
+}
+
+/** A ProPresenter timer as a clock timer every screen can run on its own between looks. */
+function fromPro(t: ProSeen | undefined, now: number): ClockTimerState {
+  if (!t) return { ...build({ mode: "timeofday" }, now), label: "Time" };
+  const base = { label: t.name || "ProPresenter", overtime: true, targetAt: null } as const;
+  if (t.kind === "elapsed") {
+    // Shown as whole seconds run: it ticked over to `sec` at `at`.
+    const elapsedMs = t.sec * 1000 + 5;
+    return t.running ? { ...base, mode: "countup", running: true, startedAt: t.at, elapsedMs, durationMs: 0 }
+      : { ...base, mode: "countup", running: false, startedAt: null, elapsedMs, durationMs: 0 };
+  }
+  // Countdowns (to a length or a time): time left when it changed to `sec`.
+  // Shown rounded up (4:59 means 4:58.x–4:59 left): just under `sec` when it ticked over at `at`.
+  const leftMs = t.sec * 1000 - 5;
+  const timer: ClockTimerState = leftMs >= 0
+    ? { ...base, mode: "countdown", running: false, startedAt: null, elapsedMs: 0, durationMs: leftMs }
+    : { ...base, mode: "countdown", running: false, startedAt: null, elapsedMs: -leftMs, durationMs: 0 };
+  return t.running ? { ...timer, running: true, startedAt: t.at } : timer;
+}
+
+/** Same timer, same second and same running state: no need to send every screen an update. */
+function sameShown(a: ClockTimerState | null, b: ClockTimerState | null, now: number) {
+  if (!a || !b) return a === b;
+  if (a.mode !== b.mode || a.label !== b.label || a.running !== b.running || Boolean(a.idle) !== Boolean(b.idle)) return false;
+  if (a.mode === "timeofday") return true;
+  const ms = (t: ClockTimerState) => (t.mode === "countup" ? 1 : -1) * (t.elapsedMs + (t.running && t.startedAt ? now - t.startedAt : 0)) + (t.mode === "countup" ? 0 : t.durationMs);
+  return Math.abs(ms(a) - ms(b)) < 60;
+}
+
+/** Put the picked ProPresenter timers on the clock (only when following). */
+function applyPro(now: number, force = false) {
+  if (state.source !== "propresenter") return;
+  const cfg = stored.settings.pro;
+  const main = fromPro(pick.main ? seen.get(pick.main) : undefined, now);
+  const aux = cfg.aux === "none" || !pick.aux ? null : fromPro(seen.get(pick.aux), now);
+  if (!force && sameShown(state.main, main, now) && sameShown(state.secondary, aux, now)) return;
+  state = { ...state, main, secondary: aux, presetId: null, presetName: proStatus.machineName ? `ProPresenter · ${proStatus.machineName}` : "ProPresenter" };
+  if (!force) changed(false);
+}
+
+/** Look at ProPresenter's timers (twice a second while a computer is chosen). */
+async function pollPro() {
+  const cfg = stored.settings.pro;
+  if (!cfg.machineId) {
+    if (proStatus.machineName || proStatus.timers.length || proStatus.error) proStatus = blankProStatus();
+    return;
+  }
+  if (proBusy) return;
+  proBusy = true;
+  const p = proFor(cfg.machineId);
+  try {
+    if (!p) { proStatus = { ...blankProStatus(), error: "That ProPresenter computer isn’t set up any more. Choose another." }; return; }
+    const now = Date.now();
+    if (now - kindsAt > 30_000) {
+      const list = await p.pro.api<{ id: { uuid: string }; countdown?: unknown; count_down_to_time?: unknown; elapsed?: unknown }[]>("GET", "/v1/timers", undefined, 2500).catch(() => null);
+      if (list) { kinds = new Map(list.map((c) => [c.id?.uuid, c.countdown ? "countdown" : c.count_down_to_time ? "count_down_to_time" : c.elapsed ? "elapsed" : "unknown"] as [string, ProKind])); kindsAt = now; }
+    }
+    const cur = (await p.pro.api<{ id: { uuid: string; name: string; index: number }; time: string; state: string }[]>("GET", "/v1/timers/current", undefined, 2500)) ?? [];
+    const looked = Date.now();
+    const before = lastLook && looked - lastLook < 3000 ? lastLook : looked - 500;
+    lastLook = looked;
+    const started: string[] = [];
+    const timers: ClockProTimer[] = cur.filter((t) => t?.id?.uuid).map((t) => {
+      const uuid = t.id.uuid, running = /running|overrunning/i.test(t.state ?? ""), sec = proSeconds(t.time ?? "0");
+      const prev = seen.get(uuid);
+      if (running && !prev?.running) started.push(uuid);
+      const kind = kinds.get(uuid) ?? "unknown";
+      let next: ProSeen;
+      if (prev && prev.sec === sec && prev.running === running) next = { ...prev, name: t.id.name ?? "", kind };
+      else {
+        // It ticked between the last look and this one. One second on from the last tick? Narrow the window.
+        let lo = before, hi = looked;
+        if (prev?.running && running && Math.abs(sec - prev.sec) === 1) {
+          const k = Math.round((hi - prev.hi) / 1000);
+          const plo = prev.lo + k * 1000, phi = prev.hi + k * 1000;
+          if (Math.max(lo, plo) <= Math.min(hi, phi)) { lo = Math.max(lo, plo); hi = Math.min(hi, phi); }
+        }
+        next = { uuid, name: t.id.name ?? "", kind, sec, running, lo, hi, at: (lo + hi) / 2 };
+      }
+      seen.set(uuid, next);
+      return { uuid, name: t.id.name ?? "", kind, time: t.time ?? "", running };
+    });
+    for (const k of [...seen.keys()]) if (!timers.some((t) => t.uuid === k)) seen.delete(k);
+
+    // Which ProPresenter timers go on the clock. "auto" takes a running one and keeps it, paused or not,
+    // until another timer starts while it's stopped (or it's deleted).
+    const running = timers.filter((t) => t.running).map((t) => t.uuid);
+    const exists = (u: string | null): u is string => Boolean(u && seen.has(u));
+    const keep = (u: string | null, other: string | null) => exists(u) && u !== other && (seen.get(u)!.running || !started.some((x) => x !== other && x !== u));
+    const mainPick = cfg.main !== "auto" ? (exists(cfg.main) ? cfg.main : null)
+      : keep(pick.main, null) ? pick.main : started.find((u) => u !== pick.aux) ?? running.find((u) => u !== pick.aux) ?? running[0] ?? (exists(pick.main) ? pick.main : null);
+    const auxPick = cfg.aux === "none" ? null : cfg.aux !== "auto" ? (exists(cfg.aux) && cfg.aux !== mainPick ? cfg.aux : null)
+      : keep(pick.aux, mainPick) ? pick.aux : started.find((u) => u !== mainPick) ?? running.find((u) => u !== mainPick) ?? null;
+    pick = { main: mainPick, aux: auxPick };
+    proStatus = { machineName: p.name, connected: true, error: null, timers, mainUuid: mainPick, auxUuid: auxPick };
+
+    // Overridden by a saved timer: back to ProPresenter when one of its timers starts (if chosen).
+    if (state.source !== "propresenter" && cfg.resumeOnStart && started.length && kindsAt) {
+      state = { ...state, source: "propresenter", blank: false };
+      applyPro(now, true);
+      changed();
+      return;
+    }
+    applyPro(now);
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (proStatus.error !== msg || proStatus.connected) proStatus = { ...proStatus, machineName: p?.name ?? null, connected: false, error: msg };
+  } finally { proBusy = false; }
+}
+
 /* ───────────── The tick: ends, next presets, schedules ───────────── */
 
 let lastMinute = "";
@@ -350,6 +536,10 @@ export function startClock() {
   started = true;
   setInterval(tick, 200);
   setInterval(() => void refreshPco(), 3000);
+  // Looks at ProPresenter about twice a second, a little irregularly, so the moments its timers tick
+  // over get pinned down (looks at a fixed rhythm would always land at the same point in each second).
+  const look = () => { void pollPro().finally(() => setTimeout(look, 380 + Math.random() * 240)); };
+  look();
   onWeekendChange(() => void refreshPco(true));
   void refreshPco(true);
 }

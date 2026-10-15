@@ -4,6 +4,32 @@ Each version's notes become its GitHub release notes (and what "What's new" show
 the newest version first. The line right under a version heading is its one-line summary: it names
 the GitHub Actions run and the release commit.
 
+## 1.43.0
+The clock follows ProPresenter's timers, and team check-ins live only on the website, with any date, a grid and printed reports.
+- **The clock follows ProPresenter.** In Clock → ProPresenter timers, pick your ProPresenter computer
+  and click **Follow ProPresenter**: whatever timer is running there shows as the main timer, and a
+  second running timer shows in the aux (left) box. Choose specific timers for main and aux if you
+  like. While following, Start, Pause, Reset and ± run ProPresenter's own timer.
+- **Your saved timers still win.** Click any saved timer (or press its number) and it takes over the
+  clock from ProPresenter. **Back to ProPresenter** (or P) returns to it, or tick "go back when one of
+  its timers starts" to do it by itself. Stream Deck / Companion: `follow-pro` and `manual`.
+- **Check-ins on the website only.** Team check-ins, their settings and the phone pages (/leads,
+  /staff) are gone from the Mac app; everything is at sundays-checkin.vercel.app. Old links and phone
+  addresses go there. Kids check-ins by room stay on each service's Check-ins tab, for paging.
+- **Your ministries come along.** The first time Sundays opens after this update it brings the Mac's
+  ministries to the website by itself (Preferences → Team Check-ins has the button too). A ministry the
+  website already has keeps its teams and gets the Mac's teams that weren't in one; new ones are added.
+  Nothing set on the website is changed.
+- **Any service date.** The check-in page lists last week's services too, so Sunday is still there on
+  Monday, and the calendar button jumps to any date, past or future.
+- **Print a report.** The printer button (or your menu → Print a report) makes a check-in report
+  grouped by ministry: totals per ministry and team, then who checked in (and when, and by whom) and
+  who didn't. For this service or the whole day, everyone or just who's missing.
+- **A grid on bigger screens.** Team cards sit two or three across on a laptop or iPad and stay one
+  per row on phones.
+- **Fix: check-in settings were slow to open.** They read every Check-Ins event's areas before showing
+  anything. Now they open right away and load areas only for the events you use.
+
 ## 1.42.0
 The mic board follows the service you're working on, and it's the whole stage display now.
 - **The mic board shows the service you're working on.** Open a service under Services, or change

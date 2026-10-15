@@ -2173,16 +2173,43 @@ route("DELETE", "/settings/checkin/link", async ({ req }) => {
   await raw`delete from ops.checkin_sessions where org_id = ${orgId()}`;
   await logActivity({ actorId: me.id, action: "Disconnected Planning Center", detail: "Team check-ins", area: "ADMIN", href: "/ops/settings/organization" });
 });
-/** The Mac's check-in settings (Preferences → Team Check-ins and its ministries), copied up once. */
+/**
+ * The Mac's check-in settings (its ministries, each service type's event and team areas), brought
+ * to the website. By default they're merged in: a ministry the website doesn't have yet is added,
+ * one it has (same name) gets the Mac's teams that aren't in a ministry yet, and events and areas
+ * fill in only what isn't set. Nothing set on the website is changed. `replace` overwrites it all.
+ */
 route("PUT", "/settings/checkin/import", async ({ req, body }) => {
   const me = await checkinManager(req);
   const { replace, ...cfg } = ConfigSchema.extend({ replace: z.boolean().default(false) }).parse(await body());
   const cur = await checkinSettings();
-  const has = Object.keys(cur.events).length + Object.keys(cur.teamLocations).length + cur.groups.length > 0;
-  if (has && !replace) throw new HttpError(409, "The website already has check-in settings.", { status: "exists" });
-  const saved = await saveCheckinSettings(cfg, me.name);
-  await logActivity({ actorId: me.id, action: "Copied check-in settings from the Mac", detail: `${Object.keys(cfg.events).length} service types, ${cfg.groups.length} ministries`, area: "ADMIN" });
-  return saved;
+  let next = cfg;
+  let added = { groups: cfg.groups.length, teams: cfg.groups.reduce((n, g) => n + g.teamIds.length, 0) };
+  if (!replace) {
+    const groups = cur.groups.map((g) => ({ ...g, teamIds: [...g.teamIds] }));
+    const placed = new Set(groups.flatMap((g) => g.teamIds));
+    added = { groups: 0, teams: 0 };
+    for (const g of cfg.groups) {
+      const name = g.name.trim();
+      let into = groups.find((x) => x.name.trim().toLowerCase() === name.toLowerCase());
+      if (!into) {
+        into = { id: groups.some((x) => x.id === g.id) ? `g${crypto.randomUUID().slice(0, 8)}` : g.id, name, teamIds: [] };
+        groups.push(into);
+        added.groups++;
+      }
+      for (const t of g.teamIds) if (!placed.has(t)) { into.teamIds.push(t); placed.add(t); added.teams++; }
+    }
+    next = {
+      events: { ...cfg.events, ...cur.events },
+      teamLocations: { ...cfg.teamLocations, ...cur.teamLocations },
+      groups,
+    };
+  }
+  const saved = await saveCheckinSettings(next, me.name);
+  if (replace || added.groups || added.teams) {
+    await logActivity({ actorId: me.id, action: "Brought check-in settings over from the Mac", detail: `${added.groups} ministries added, ${added.teams} teams placed${replace ? " (replaced)" : ""}`, area: "ADMIN" });
+  }
+  return { ...saved, added };
 });
 
 route("GET", "/settings/organization", async ({ req }) => {

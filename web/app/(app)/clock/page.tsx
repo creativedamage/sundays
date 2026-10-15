@@ -3,7 +3,10 @@
  * Production clock: run the clock, cue saved timers, send messages. The same clock shows on the
  * network (/clock), as an NDI source and on a second display (Preferences → Video → Clock outputs).
  *
- * Keys: Space start/pause · R reset · ← → previous/next timer · 1–9 start that timer · B blank.
+ * ProPresenter: the clock can follow a ProPresenter computer's timers (main + aux); any saved timer
+ * takes over, and Follow ProPresenter goes back.
+ *
+ * Keys: Space start/pause · R reset · ← → previous/next timer · 1–9 start that timer · B blank · P follow ProPresenter.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -16,6 +19,7 @@ import { CLOCK_MODES, TIMER_COLORS, newPreset, readClock, type ClockMode, type C
 import { Api } from "@/lib/api";
 import { ClockFace } from "@/components/clock/ClockFace";
 import { PresetEditor, SpecFields, describeSpec } from "@/components/clock/PresetEditor";
+import { ProPanel } from "@/components/clock/ProPanel";
 import { useClockStream } from "@/components/clock/useClock";
 import { PrefsLink } from "@/components/settings/PrefsLink";
 import { Spinner } from "@/components/ui";
@@ -25,11 +29,17 @@ const QUICK_MSGS = ["Wrap it up", "5 minutes", "Speak up", "Look at the camera",
 
 export default function ClockPage() {
   const qc = useQueryClient();
-  const view = useQuery({ queryKey: KEY, queryFn: Api.clock, refetchInterval: 5000 });
+  // Every second while following ProPresenter (its timers list), else every five.
+  const view = useQuery({ queryKey: KEY, queryFn: Api.clock, refetchInterval: (q) => (q.state.data?.settings.pro?.machineId ? 1000 : 5000) });
   const { out, now } = useClockStream("/api/clock-out", 10);
   const act = useMutation({
     mutationFn: Api.clockAction,
     onError: (e) => toast.error("The clock didn’t take that", { description: (e as Error).message }),
+  });
+  const saveSettings = useMutation({
+    mutationFn: Api.saveClockSettings,
+    onSuccess: (settings) => { qc.setQueryData<ClockView>(KEY, (v) => v && { ...v, settings }); void qc.invalidateQueries({ queryKey: KEY }); },
+    onError: (e) => toast.error("Couldn’t save that", { description: (e as Error).message }),
   });
   const savePresets = useMutation({
     mutationFn: Api.saveClockPresets,
@@ -50,11 +60,12 @@ export default function ClockPage() {
       else if (e.key === "ArrowRight") run({ type: "next" });
       else if (e.key === "ArrowLeft") run({ type: "prev" });
       else if (e.key === "b" || e.key === "B") run({ type: "blank", on: !state?.blank });
+      else if ((e.key === "p" || e.key === "P") && view.data?.settings.pro.machineId) run({ type: "follow", on: state?.source !== "propresenter" });
       else if (/^[1-9]$/.test(e.key) && presets[Number(e.key) - 1]) run({ type: "load", presetId: presets[Number(e.key) - 1].id, start: true });
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [run, presets, state?.blank, editing]);
+  }, [run, presets, state?.blank, state?.source, view.data?.settings.pro.machineId, editing]);
 
   if (!view.data || !state) return <div className="p-8"><Spinner /></div>;
   const v = view.data;
@@ -82,6 +93,9 @@ export default function ClockPage() {
         <Timer size={18} className="text-accent" />
         <h1 className="text-lg font-semibold">Clock</h1>
         {state.presetName && <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent">{state.presetName}</span>}
+        {v.settings.pro.machineId && state.source !== "propresenter" && v.pro.connected && (
+          <button className="rounded-full border border-line px-2.5 py-0.5 text-xs text-ink-soft hover:border-accent hover:text-accent" onClick={() => run({ type: "follow", on: true })} title="P">Back to ProPresenter</button>
+        )}
         <div className="ml-auto flex items-center gap-2 text-xs">
           <OutputChip on={v.settings.ndi.enabled && v.status.ndi.running} icon={Radio}
             label={v.settings.ndi.enabled ? (v.status.ndi.running ? `NDI · ${v.status.ndi.connections} watching` : v.status.ndi.error ? "NDI · problem" : "NDI · starting") : "NDI off"}
@@ -119,6 +133,8 @@ export default function ClockPage() {
               </button>
             </div>
           </div>
+
+          <ProPanel view={v} onSettings={(pro) => saveSettings.mutate({ pro })} onFollow={(on) => run({ type: "follow", on })} />
 
           <section className="panel p-4">
             <h2 className="label mb-2 flex items-center gap-1.5"><MessageSquare size={12} /> Message</h2>
@@ -194,6 +210,7 @@ export default function ClockPage() {
             <button className="btn-outline py-1 text-xs" onClick={() => setEditing(newPreset(`p${Date.now().toString(36)}`))}><Plus size={13} /> New timer</button>
           </div>
           {!presets.length && <p className="rounded-xl border border-dashed border-line p-4 text-sm text-ink-muted">Save timers you use every week (Walk-in, Announcements, Message, Response) and start each with one click, a number key, or on a schedule.</p>}
+          {state.source === "propresenter" && presets.length > 0 && <p className="text-xs text-ink-muted">Showing ProPresenter’s timers. Click a timer below to take over the clock.</p>}
           <ul className="space-y-2">
             {presets.map((p, i) => {
               const active = state.presetId === p.id;
@@ -221,7 +238,7 @@ export default function ClockPage() {
               );
             })}
           </ul>
-          <p className="text-[11px] text-ink-faint">Click a timer to start it. Keys: Space start/pause · R reset · ← → previous/next · 1–9 start a timer · B blank.</p>
+          <p className="text-[11px] text-ink-faint">Click a timer to start it. Keys: Space start/pause · R reset · ← → previous/next · 1–9 start a timer · B blank · P follow ProPresenter.</p>
         </aside>
       </div>
 

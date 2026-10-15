@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { BellRing, CalendarDays, UsersRound, LayoutDashboard, MessageCircle, MonitorUp, KanbanSquare, Lock, LockOpen, LogOut, Settings, Timer, MicVocal } from "lucide-react";
+import { BellRing, CalendarDays, LayoutDashboard, MessageCircle, MonitorUp, KanbanSquare, Lock, LockOpen, LogOut, Settings, Timer, MicVocal } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +17,7 @@ import { ScheduleModal } from "@/components/scheduling/ScheduleModal";
 import { Logo } from "@/components/Logo";
 import { routes } from "@/lib/routes";
 import { PrefsLink } from "@/components/settings/PrefsLink";
+import { bringCheckinSettingsOnce } from "@/components/settings/CheckinsMoved";
 import { PageRequestsBar } from "@/components/paging/PageRequests";
 import { useCampus } from "@/lib/campus";
 import { WeekendPicker, useWeekend } from "@/lib/weekend";
@@ -38,6 +39,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   // Warm up the upcoming-services list right away, so "Schedule in Services" opens instantly.
   useEffect(() => { void prefetchPlans(qc); }, [qc]);
+  // Team check-ins moved to the website: bring this Mac's ministries there once (merged, quietly).
+  useEffect(() => { const t = setTimeout(() => void bringCheckinSettingsOnce(), 8000); return () => clearTimeout(t); }, []);
   const me = useQuery({ queryKey: qk.me, queryFn: Api.me, staleTime: Infinity });
   // Service Mode (a shared computer): only Services, ProPresenter, Clock, Mic board and Parent paging.
   const mode = useAppMode().data;
@@ -79,7 +82,6 @@ function Shell({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/workflows", label: "Workflows", icon: KanbanSquare },
     { href: "/services", to: servicesHref, label: "Services", icon: CalendarDays },
-    { href: "/team-checkins", label: "Team check-ins", icon: UsersRound },
     { href: "/propresenter", label: "ProPresenter", icon: MonitorUp },
     { href: "/clock", label: "Clock", icon: Timer },
     { href: "/micboard", label: "Mic board", icon: MicVocal },

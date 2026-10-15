@@ -1,5 +1,5 @@
 /**
- * Kids & Nursery iPad pages, Team check-ins on phones (/leads, /staff) and FOH companions.
+ * Kids & Nursery iPad pages and FOH companions (/leads and /staff now send phones to the check-in website).
  *
  * The main app only listens on 127.0.0.1. When "iPads on the church network" is turned on in
  * Settings, a second, much smaller server listens on the network (port 47130 by default). It serves
@@ -8,7 +8,6 @@
  * Each ministry is locked with its own PIN. An iPad signed in to Nursery can see Nursery's checked-in
  * children (name, photo, security code, room) and page the auditorium; nothing else.
  */
-import { weekendPlans } from "./lib/weekend.js";
 import fs from "node:fs";
 import path from "node:path";
 import type { Server } from "node:http";
@@ -16,7 +15,7 @@ import express, { Router, type NextFunction, type Request, type Response } from 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { z } from "zod";
-import { MINISTRIES, type KioskChild, type KioskInfo, type Ministry, type TeamGroup, type TeamPhoneData, type TeamPhoneInfo } from "../../shared/types.js";
+import { MINISTRIES, type KioskChild, type KioskInfo, type Ministry } from "../../shared/types.js";
 import { pcoForUser } from "./auth/oauth.js";
 import type { PcoApi } from "./pco/api.js";
 import { extras, settings } from "./lib/db.js";
@@ -24,7 +23,8 @@ import { clockOutRouter } from "./routes/clock.js";
 import { clockOutputs, clockSettings } from "./lib/clock.js";
 import { boardOutputs, boardSettings, displayState } from "./lib/board.js";
 import { boardOutRouter } from "./routes/board.js";
-import { onPhonesChange, phones, phoneSession, phoneUnlock, staffCheckIn, staffUndo, teamCheckIns } from "./lib/teamCheckins.js";
+import { onPhonesChange, phones } from "./lib/teamCheckins.js";
+import { CHECKIN_URL } from "../../shared/cloud.js";
 import { kioskSession, onPagingChange, page, PagingError, requestPage, status, stored, unlock } from "./lib/paging.js";
 import { companionTuning, relayPress } from "./lib/tuningRelay.js";
 import { companionAct, companionFor, companionView, pairingOpen, pairWithCode } from "./lib/companion.js";
@@ -183,73 +183,6 @@ companionLanRouter.post("/act", needCompanion, h(async (req, res) => {
   res.json(companionView());
 }));
 
-/* ───────────── Team check-ins on phones (leads view, staff check-in) ───────────── */
-
-const phoneCookie = "cs_team";
-const roleZ = z.enum(["leads", "staff"]);
-function phonesPco() {
-  const o = phones().owner;
-  return o ? pcoForUser(o.userId, o.demo) : null;
-}
-const teamLanRouter = Router();
-teamLanRouter.use((_req, res, next) => (phones().enabled ? next() : res.status(404).json({ error: "not_found" })));
-teamLanRouter.get("/:role/info", h(async (req, res) => {
-  const role = roleZ.parse(req.params.role);
-  const info: TeamPhoneInfo = { role, church: await church(), logo: settings.get().logo, unlocked: phoneSession(role, req.cookies?.[phoneCookie]), enabled: true };
-  res.json(info);
-}));
-teamLanRouter.post("/:role/unlock", h(async (req, res) => {
-  const role = roleZ.parse(req.params.role);
-  const { pin } = z.object({ pin: z.string().max(12) }).parse(req.body);
-  const r = phoneUnlock(role, pin, req.ip ?? "unknown");
-  if ("error" in r) {
-    const message = r.error === "no_pin" ? "This page isn’t set up yet. Ask a staff member to set a PIN in Sundays → Preferences → Network Connections → Team check-ins on phones."
-      : r.error === "too_many_tries" ? `Too many tries. Wait ${r.waitSeconds} seconds.` : "That PIN isn’t right.";
-    return res.status(r.error === "too_many_tries" ? 429 : 401).json({ ...r, message });
-  }
-  res.cookie(phoneCookie, r.token, cookieOpts);
-  res.json({ ok: true });
-}));
-teamLanRouter.post("/:role/lock", (_req, res) => { res.clearCookie(phoneCookie, { path: "/" }); res.json({ ok: true }); });
-const needPhone = (req: Request, res: Response, next: NextFunction) => {
-  const role = roleZ.safeParse(req.params.role);
-  if (!role.success || !phoneSession(role.data, req.cookies?.[phoneCookie])) return res.status(401).json({ error: "locked" });
-  next();
-};
-const denied = () => "Planning Center Check-Ins isn’t available to the account that set up these pages, so only staff check-ins show.";
-teamLanRouter.get("/:role/data", needPhone, h(async (req, res) => {
-  const api = phonesPco();
-  if (!api) return res.status(503).json({ error: "not_configured", message: "Ask a staff member to open Sundays → Preferences and save the Team check-ins phone settings." });
-  const cutoff = Date.now() - 8 * 3600e3;
-  const plans = (await api.listUpcomingPlans()).filter((p) => Date.parse(p.sortDate) > cutoff).slice(0, 14);
-  const services = plans.map((p) => ({
-    id: p.id, serviceTypeId: p.serviceTypeId, sortDate: p.sortDate,
-    label: `${new Date(p.sortDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${p.serviceTypeName}`,
-  }));
-  // Unless the phone picked one: the picked weekend's first service.
-  const inWeekend = new Set((await weekendPlans(api).catch(() => [])).map((p) => p.id));
-  const chosen = services.find((x) => x.id === req.query.plan) ?? services.find((x) => inWeekend.has(x.id)) ?? services[0] ?? null;
-  const out: TeamPhoneData = {
-    services, planId: chosen?.id ?? null, groups: extras.get<TeamGroup[]>("teamGroups", []),
-    data: chosen ? await teamCheckIns(api, chosen.serviceTypeId, chosen.id, denied, "phones") : null,
-  };
-  res.set("Cache-Control", "no-store").json(out);
-}));
-teamLanRouter.post("/:role/checkin", needPhone, h(async (req, res) => {
-  if (req.params.role !== "staff") return res.status(403).json({ error: "forbidden", message: "Only the staff page can check people in." });
-  const api = phonesPco();
-  if (!api) return res.status(503).json({ error: "not_configured", message: "Not set up yet." });
-  const b = z.object({ st: z.string().max(40), plan: z.string().max(40), personId: z.string().regex(/^\w{1,30}$/), undo: z.boolean().optional(), by: z.string().trim().max(40).optional() }).parse(req.body);
-  try {
-    if (b.undo) { await staffUndo(api, b.st, b.plan, b.personId); return res.json({ ok: true }); }
-    const r = await staffCheckIn(api, b.st, b.plan, b.personId, b.by ? `${b.by} (staff phone)` : "Staff phone");
-    res.json({ ok: true, ...r });
-  } catch (e) {
-    if ((e as { status?: number }).status === 404) return res.status(404).json({ error: "not_found", message: (e as Error).message });
-    throw e;
-  }
-}));
-
 /* ───────────── The network listener ───────────── */
 
 let server: Server | null = null;
@@ -269,7 +202,7 @@ function createKioskApp() {
   const ipadsOn = (_req: Request, res: Response, next: NextFunction) => (stored().config.ipads.enabled ? next() : res.status(404).json({ error: "not_found" }));
   app.use("/api/kiosk", ipadsOn, kioskRouter);
   app.use("/api/companion", companionLanRouter);
-  app.use("/api/team", teamLanRouter);
+  app.use("/api/team", (_req, res) => res.status(410).json({ error: "moved", message: `Team check-ins moved to ${CHECKIN_URL}` }));
   // The clock's feed is also what the stage display's Clock view uses.
   const clockOn = (_req: Request, res: Response, next: NextFunction) => (clockSettings().lan || boardSettings().lan ? next() : res.status(404).json({ error: "not_found" }));
   const boardOn = (_req: Request, res: Response, next: NextFunction) => (boardSettings().lan ? next() : res.status(404).json({ error: "not_found" }));
@@ -286,10 +219,10 @@ function createKioskApp() {
       const m = MINISTRIES.find((x) => names[x] && names[x] === host)
         ?? MINISTRIES.find((x) => host.split(".")[0] === x); // kids.… / nursery.…
       if (m) return res.redirect(302, `/${m}`);
-      // staff.… / leads.… (or the names set in Preferences) go to the Team check-ins phone pages.
+      // staff.… / leads.…: Team check-ins moved to the website.
       const tn = phones().hostnames;
       const role = (["leads", "staff"] as const).find((x) => tn[x] && tn[x] === host) ?? (["leads", "staff"] as const).find((x) => host.split(".")[0] === x);
-      if (role) return res.redirect(302, `/${role}`);
+      if (role) return res.redirect(302, CHECKIN_URL);
       next();
     });
     app.get(["/", "/nursery", "/kids"], ipadsOn, send);
@@ -298,8 +231,8 @@ function createKioskApp() {
       (_req, res) => res.set("Cache-Control", "no-cache").sendFile(path.join(webRoot!, "displayout.html")));
     // The production clock (full screen in any browser on the network).
     app.get("/clock", (_req, res, next) => (clockSettings().lan ? next() : res.status(404).send("The clock isn’t shared on the network. Turn it on in Sundays → Preferences → Clock.")), (_req, res) => res.set("Cache-Control", "no-cache").sendFile(path.join(webRoot!, "clockout.html")));
-    const teamPage = path.join(webRoot, "team.html");
-    app.get(["/leads", "/staff"], (_req, res) => (phones().enabled ? res.set("Cache-Control", "no-cache").sendFile(teamPage) : res.status(404).send("Not found")));
+    // Team check-ins on phones moved to the website (everyone signs in with Planning Center there).
+    app.get(["/leads", "/staff"], (_req, res) => res.redirect(302, CHECKIN_URL));
     // Only what the iPad page needs: its scripts/styles, the PDF-free static bundle and icons.
     app.use("/_next/static", express.static(path.join(webRoot, "_next", "static"), { immutable: true, maxAge: "365d" }));
     for (const f of ["favicon.ico", "icon.png", "apple-touch-icon.png"]) {

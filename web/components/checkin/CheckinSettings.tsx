@@ -8,13 +8,13 @@
 import clsx from "clsx";
 import { ArrowLeft, CalendarCheck, Layers, MapPin, Plus, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CheckinConfig, CheckinSetup } from "@shared/ops/checkin";
+import type { CheckinConfig, CheckinLocation, CheckinSetup } from "@shared/ops/checkin";
 import { CheckinApi } from "@/lib/checkin";
 import { Shell } from "./ui";
 
 const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2).map((w) => w.replace(/s$/, ""));
 /** Best-guess location for a team: shared words in the team and location (or its folder) names. */
-function guess(team: string, locs: CheckinSetup["events"][number]["locations"]) {
+function guess(team: string, locs: CheckinLocation[]) {
   const tw = new Set(words(team));
   let best: { id: string; name: string } | null = null;
   let score = 0;
@@ -33,6 +33,20 @@ export function CheckinSettings({ onClose }: { onClose: (changed: boolean) => vo
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => { CheckinApi.setup().then((s) => { setSetup(s); setDraft(s.config); }).catch((e) => setError((e as Error).message)); }, []);
+
+  // Each event's areas load on their own, only for events that are chosen (reading them all was slow).
+  const [locs, setLocs] = useState<Record<string, CheckinLocation[] | "loading" | { error: string }>>({});
+  const wanted = useMemo(() => [...new Set(Object.values(draft?.events ?? {}).map((e) => e.id))], [draft?.events]);
+  useEffect(() => {
+    if (!setup) return;
+    for (const id of wanted) {
+      if (locs[id] || !setup.events.some((e) => e.id === id)) continue;
+      setLocs((m) => ({ ...m, [id]: "loading" }));
+      CheckinApi.locations(id)
+        .then((r) => setLocs((m) => ({ ...m, [id]: r.locations })))
+        .catch((e) => setLocs((m) => ({ ...m, [id]: { error: (e as Error).message } })));
+    }
+  }, [setup, wanted, locs]);
   const dirty = Boolean(setup && draft && JSON.stringify(setup.config) !== JSON.stringify(draft));
 
   const save = async () => {
@@ -64,14 +78,16 @@ export function CheckinSettings({ onClose }: { onClose: (changed: boolean) => vo
       <main className="flex-1 space-y-4 px-4 py-4">
         {error && <p className="rounded-xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">{error}</p>}
         {!setup && !error && <p className="py-10 text-center text-ink-muted">Loading from Planning Center…</p>}
-        {setup && draft && tab === "events" && <Events setup={setup} draft={draft} onChange={setDraft} />}
+        {setup && draft && tab === "events" && <Events setup={setup} draft={draft} locs={locs} onChange={setDraft} />}
         {setup && draft && tab === "ministries" && <Ministries setup={setup} draft={draft} onChange={setDraft} />}
       </main>
     </Shell>
   );
 }
 
-function Events({ setup, draft, onChange }: { setup: CheckinSetup; draft: CheckinConfig; onChange: (c: CheckinConfig) => void }) {
+type Locs = Record<string, CheckinLocation[] | "loading" | { error: string }>;
+
+function Events({ setup, draft, locs, onChange }: { setup: CheckinSetup; draft: CheckinConfig; locs: Locs; onChange: (c: CheckinConfig) => void }) {
   return (
     <>
       <p className="text-sm text-ink-muted">
@@ -79,15 +95,18 @@ function Events({ setup, draft, onChange }: { setup: CheckinSetup; draft: Checki
         Only check-ins to that event count, and check-ins made here are recorded at the team’s area.
       </p>
       {setup.eventsError && <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">{setup.eventsError}</p>}
-      {setup.serviceTypes.map((st) => <ServiceType key={st.id} st={st} events={setup.events} config={draft} onChange={onChange} />)}
+      {setup.serviceTypes.map((st) => <ServiceType key={st.id} st={st} events={setup.events} locs={locs} config={draft} onChange={onChange} />)}
       {!setup.serviceTypes.length && <p className="text-sm text-ink-muted">No service types you can see in Planning Center.</p>}
     </>
   );
 }
 
-function ServiceType({ st, events, config, onChange }: { st: CheckinSetup["serviceTypes"][number]; events: CheckinSetup["events"]; config: CheckinConfig; onChange: (c: CheckinConfig) => void }) {
+function ServiceType({ st, events, locs, config, onChange }: { st: CheckinSetup["serviceTypes"][number]; events: CheckinSetup["events"]; locs: Locs; config: CheckinConfig; onChange: (c: CheckinConfig) => void }) {
   const ev = config.events[st.id] ?? null;
-  const event = events.find((e) => e.id === ev?.id);
+  const known = events.find((e) => e.id === ev?.id);
+  const loaded = known ? locs[known.id] : undefined;
+  const locations = Array.isArray(loaded) ? loaded : null;
+  const event = known && locations ? { ...known, locations } : null;
   const [open, setOpen] = useState(false);
   const assigned = st.teams.filter((t) => config.teamLocations[t.id]).length;
   const folders = [...new Set((event?.locations ?? []).map((l) => l.folder ?? ""))];
@@ -95,9 +114,9 @@ function ServiceType({ st, events, config, onChange }: { st: CheckinSetup["servi
     const e = events.find((x) => x.id === id);
     const evs = { ...config.events };
     if (e) evs[st.id] = { id: e.id, name: e.name }; else delete evs[st.id];
-    const keepIds = new Set(e?.locations.map((l) => l.id) ?? []);
+    // A different event: its areas are different, so the teams' areas go.
     const tl = { ...config.teamLocations };
-    for (const t of st.teams) if (tl[t.id] && !keepIds.has(tl[t.id].id)) delete tl[t.id];
+    if (e?.id !== ev?.id) for (const t of st.teams) delete tl[t.id];
     onChange({ ...config, events: evs, teamLocations: tl });
     setOpen(true);
   };
@@ -120,7 +139,9 @@ function ServiceType({ st, events, config, onChange }: { st: CheckinSetup["servi
         <option value="">Choose the volunteer event…</option>
         {events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
       </select>
-      {ev && !event && <p className="mt-2 text-xs text-warn">“{ev.name}” isn’t in Check-Ins any more. Choose another event.</p>}
+      {ev && !known && <p className="mt-2 text-xs text-warn">“{ev.name}” isn’t in Check-Ins any more. Choose another event.</p>}
+      {known && loaded === "loading" && <p className="mt-3 text-sm text-ink-muted">Loading its areas…</p>}
+      {known && loaded && typeof loaded === "object" && !Array.isArray(loaded) && <p className="mt-3 text-sm text-warn">{loaded.error}</p>}
       {event && (
         <>
           <div className="mt-3 flex items-center justify-between">

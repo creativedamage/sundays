@@ -26,7 +26,7 @@ import { UpdatesSettings } from "@/components/settings/UpdatesSettings";
 import { ConsoleSettings } from "@/components/settings/ConsoleSettings";
 import { CampusSettings } from "@/components/settings/CampusSettings";
 import { ClockOutputsSettings } from "@/components/settings/ClockOutputsSettings";
-import { VolunteerCheckInSettings } from "@/components/settings/VolunteerCheckInSettings";
+import { CheckinsMoved } from "@/components/settings/CheckinsMoved";
 import { ResiSettings } from "@/components/settings/ResiSettings";
 
 const TABS: { id: PrefsTab; label: string; icon: typeof Info; blurb: string }[] = [
@@ -34,9 +34,9 @@ const TABS: { id: PrefsTab; label: string; icon: typeof Info; blurb: string }[] 
   { id: "appearance", label: "Appearance", icon: Palette, blurb: "Theme and your logo." },
   { id: "startup", label: "Default Startup", icon: Power, blurb: "What opens first." },
   { id: "campuses", label: "Campuses", icon: Building2, blurb: "Sort service types by campus, and choose yours." },
-  { id: "checkins", label: "Team Check-ins", icon: UserCheck, blurb: "The Check-Ins event volunteers use, and each team’s area of serving." },
+  { id: "checkins", label: "Team Check-ins", icon: UserCheck, blurb: "Moved to the check-in website." },
   { id: "audio", label: "Audio", icon: AudioLines, blurb: "Allen & Heath, Waves SuperRack and Smaart." },
-  { id: "network", label: "Network Connections", icon: Network, blurb: "Kids & Nursery paging and iPads, team check-ins on phones, FOH companions." },
+  { id: "network", label: "Network Connections", icon: Network, blurb: "Kids & Nursery paging and iPads, FOH companions." },
   { id: "video", label: "Video", icon: MonitorPlay, blurb: "Clock outputs (NDI, network, second display), ProPresenter computers and Resi." },
 ];
 
@@ -119,7 +119,7 @@ function PreferencesOpen({ standalone }: { standalone?: boolean }) {
               {tab === "appearance" && <AppearanceSection s={s} save={save.mutate} />}
               {tab === "startup" && <><StartupSection s={s} save={save.mutate} /><AppModeSection /></>}
               {tab === "campuses" && <CampusSettings />}
-              {tab === "checkins" && <VolunteerCheckInSettings />}
+              {tab === "checkins" && <CheckinsMoved compact />}
               {tab === "audio" && <><ConsoleSettings /><WavesSettings w={s.waves} onChange={(waves) => save.mutate({ waves })} /><SmaartSettings /></>}
               {tab === "network" && <PagingSettings />}
               {tab === "video" && <><ClockOutputsSettings /><ProComputersSettings /><ResiSettings /></>}

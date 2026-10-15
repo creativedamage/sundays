@@ -103,6 +103,12 @@ export interface ClockState {
   blank: boolean;
   presetId: string | null;
   presetName: string | null;
+  /**
+   * Where the timers come from: "propresenter" mirrors ProPresenter's running timers (main, and its
+   * second one as the aux timer); "manual" is a saved timer or one set here. Loading a saved timer
+   * always takes over from ProPresenter; Follow ProPresenter goes back. Older states: manual.
+   */
+  source?: "manual" | "propresenter";
   warnSec: number;
   dangerSec: number;
   /** The server's clock when this was sent (to correct each screen's clock). */
@@ -125,6 +131,36 @@ export interface ClockOutputSettings {
   showTimeOfDay: boolean;
   /** Key in the network control links (Stream Deck / Companion). */
   controlKey: string;
+  /** Following ProPresenter's timers. */
+  pro: ClockProSettings;
+}
+
+/**
+ * ProPresenter timers on the clock. With a computer chosen, the clock can follow its timers: the
+ * main timer is the one picked ("auto" = the first one running) and the aux timer (the left box)
+ * the second ("auto" = another one running, "none" = keep the time of day).
+ */
+export interface ClockProSettings {
+  /** A ProPresenter computer from Preferences → Video (null = not following ProPresenter). */
+  machineId: string | null;
+  main: string;
+  aux: string;
+  /** While a saved timer has taken over: go back to ProPresenter as soon as one of its timers starts. */
+  resumeOnStart: boolean;
+}
+export const DEFAULT_PRO_SETTINGS: ClockProSettings = { machineId: null, main: "auto", aux: "auto", resumeOnStart: false };
+
+/** A ProPresenter timer as the clock page lists it. */
+export interface ClockProTimer { uuid: string; name: string; kind: "countdown" | "count_down_to_time" | "elapsed" | "unknown"; time: string; running: boolean }
+/** How following ProPresenter is going (shown on the clock page). */
+export interface ClockProStatus {
+  machineName: string | null;
+  connected: boolean;
+  error: string | null;
+  timers: ClockProTimer[];
+  /** The timers on the clock right now, while following. */
+  mainUuid: string | null;
+  auxUuid: string | null;
 }
 
 export interface ClockStatusView {
@@ -132,7 +168,7 @@ export interface ClockStatusView {
   displays: { id: number; label: string; primary: boolean }[];
 }
 
-export interface ClockView { state: ClockState; presets: ClockPreset[]; settings: ClockOutputSettings; status: ClockStatusView; urls: string[] }
+export interface ClockView { state: ClockState; presets: ClockPreset[]; settings: ClockOutputSettings; status: ClockStatusView; urls: string[]; pro: ClockProStatus; proMachines: { id: string; name: string }[] }
 
 /* ───────────── The math ───────────── */
 

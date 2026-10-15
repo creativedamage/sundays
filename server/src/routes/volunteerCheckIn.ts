@@ -11,6 +11,9 @@ import { saveVolunteerConfig, volunteerConfig } from "../lib/teamCheckins.js";
 export const volunteerCheckInRouter = Router();
 const h = (fn: (req: any, res: any) => Promise<unknown>) => (req: any, res: any, next: any) => fn(req, res).catch(next);
 
+/** Just this Mac's saved settings (no Planning Center calls): for bringing them to the website. */
+volunteerCheckInRouter.get("/config", (_req, res) => res.json(volunteerConfig()));
+
 volunteerCheckInRouter.get("/", h(async (req, res) => {
   // ?st=1,2: only these service types (your campus), so nothing from other campuses is loaded.
   const only = new Set(String(req.query.st ?? "").split(",").filter(Boolean));

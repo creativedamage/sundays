@@ -11,10 +11,10 @@
  *   POST /checkin/session   {code, verifier, redirectUri} → {token, me}
  *   POST /checkin/handoff · /checkin/handoff/claim   (iPhone home-screen apps, see handoff below)
  *   GET  /checkin/me · POST /checkin/signout
- *   GET  /checkin/services                → upcoming services
+ *   GET  /checkin/services[?date=YYYY-MM-DD] → last week's and upcoming services, or that day's
  *   GET  /checkin/plan?st=&plan=          → teams, who's in, ministries
  *   POST /checkin/check  {st, plan, personId, undo?}
- *   GET  /checkin/setup · PUT /checkin/settings   (Manage)
+ *   GET  /checkin/setup · GET /checkin/setup/locations?event= · PUT /checkin/settings   (Manage)
  *
  * Planning Center's Check-Ins API can't create check-ins, so "Check in" here is Sundays' own
  * record (ops.staff_checkins), shown next to real Check-Ins scans, as on the Mac.
@@ -277,15 +277,54 @@ async function serviceTypes(s: Session) {
   });
 }
 
+const toService = (t: { id: string; name: string }, p: Flat): CheckinService =>
+  ({ id: p.id, serviceTypeId: t.id, serviceTypeName: t.name, title: p.title || p.series_title || p.dates || "", sortDate: p.sort_date as string });
+const noPlans = (e: unknown) => (e instanceof PcoError ? [] as Flat[] : Promise.reject(e));
+
+/** Upcoming services. */
 async function upcoming(s: Session): Promise<CheckinService[]> {
   return cached(`up:${s.pcoOrgId}:${s.pcoPersonId}`, 60_000, async () => {
     const types = await serviceTypes(s);
-    const per = await mapLimit(types, 4, async (t) => {
-      const plans = await s.pco.list(`${S}/service_types/${t.id}/plans?filter=future&order=sort_date`, 1).catch((e) => (e instanceof PcoError ? [] as Flat[] : Promise.reject(e)));
-      return plans.slice(0, 5).map((p) => ({ id: p.id, serviceTypeId: t.id, serviceTypeName: t.name, title: p.title || p.series_title || p.dates || "", sortDate: p.sort_date as string }));
+    const per = await mapLimit(types, 6, async (t) => {
+      const plans = await s.pco.list(`${S}/service_types/${t.id}/plans?filter=future&order=sort_date`, 1).catch(noPlans);
+      return plans.slice(0, 5).map((p) => toService(t, p));
     });
     const cutoff = Date.now() - 8 * 3600e3;
     return per.flat().filter((p) => Date.parse(p.sortDate) > cutoff).sort((a, b) => a.sortDate.localeCompare(b.sortDate)).slice(0, 20);
+  });
+}
+
+/** Services in the last week (so Sunday's are still there on Monday). */
+async function recent(s: Session): Promise<CheckinService[]> {
+  return cached(`past:${s.pcoOrgId}:${s.pcoPersonId}`, 5 * 60_000, async () => {
+    const types = await serviceTypes(s);
+    const per = await mapLimit(types, 6, async (t) => {
+      const plans = await s.pco.list(`${S}/service_types/${t.id}/plans?filter=past&order=-sort_date`, 1).catch(noPlans);
+      return plans.slice(0, 3).map((p) => toService(t, p));
+    });
+    const since = Date.now() - 7 * 864e5;
+    return per.flat().filter((p) => Date.parse(p.sortDate) > since);
+  });
+}
+
+/** The services list: last week's and upcoming ones, in date order. */
+async function serviceList(s: Session): Promise<CheckinService[]> {
+  const [past, next] = await Promise.all([recent(s), upcoming(s)]);
+  const seen = new Set<string>();
+  return [...past, ...next].filter((x) => !seen.has(x.id) && Boolean(seen.add(x.id))).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+}
+
+/** Every service on one local day ("YYYY-MM-DD" in the church's time zone), past or future. */
+async function servicesOn(s: Session, day: string): Promise<CheckinService[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new HttpError(400, "Pick a date.");
+  return cached(`on:${s.pcoOrgId}:${s.pcoPersonId}:${day}`, 60_000, async () => {
+    const types = await serviceTypes(s);
+    const after = new Date(Date.parse(`${day}T00:00:00Z`) - 864e5).toISOString().slice(0, 10);
+    const per = await mapLimit(types, 6, async (t) => {
+      const plans = await s.pco.list(`${S}/service_types/${t.id}/plans?filter=after&after=${after}&order=sort_date`, 1).catch(noPlans);
+      return plans.slice(0, 8).map((p) => toService(t, p)).filter((p) => p.sortDate && localDay(p.sortDate, s.timeZone) === day);
+    });
+    return per.flat().sort((a, b) => a.sortDate.localeCompare(b.sortDate));
   });
 }
 
@@ -376,7 +415,7 @@ async function planData(s: Session, st: string, planId: string): Promise<Checkin
 async function sameDay(s: Session, st: string, planId: string, personId: string) {
   const here = await plan(s, st, planId);
   const day = localDay(here.sortDate, s.timeZone);
-  const others = (await upcoming(s)).filter((x) => x.id !== planId && localDay(x.sortDate, s.timeZone) === day);
+  const others = (await servicesOn(s, day)).filter((x) => x.id !== planId);
   const plans = [here, ...(await mapLimit(others, 3, (x) => plan(s, x.serviceTypeId, x.id).catch(() => null))).filter((x): x is Plan => Boolean(x))];
   return plans.flatMap((p) => {
     const mine = p.roster.filter((m) => m.rel.person?.id === personId && m.status !== "D");
@@ -390,7 +429,7 @@ async function check(s: Session, body: unknown) {
   if (b.undo) {
     const here = await plan(s, b.st, b.plan);
     const day = localDay(here.sortDate, s.timeZone);
-    const ids = [b.plan, ...(await upcoming(s)).filter((x) => localDay(x.sortDate, s.timeZone) === day).map((x) => x.id)];
+    const ids = [b.plan, ...(await servicesOn(s, day)).map((x) => x.id)];
     const gone = await sql`delete from ops.staff_checkins where person_id = ${b.personId} and plan_id = any(${ids}) returning id`;
     return { ok: true, undone: gone.length };
   }
@@ -412,29 +451,48 @@ async function check(s: Session, body: unknown) {
 
 /* ───────────── Settings (Manage) ───────────── */
 
-async function setup(s: Session): Promise<CheckinSetup> {
-  const types = await serviceTypes(s);
-  const withTeams = await mapLimit(types, 4, async (t) => ({
-    id: t.id, name: t.name,
-    teams: (await s.pco.list(`${S}/service_types/${t.id}/teams`, 3).catch(() => [] as Flat[])).filter((x) => !x.archived_at && !x.deleted_at)
-      .map((x) => ({ id: x.id, name: (x.name ?? "") as string })).sort((a, b) => a.name.localeCompare(b.name)),
-  }));
-  let eventsError: string | null = null;
-  let events: CheckinSetup["events"] = [];
-  try {
-    const evs = (await s.pco.list(`/check-ins/v2/events?order=name`, 5)).filter((e) => !e.archived_at);
-    events = await mapLimit(evs, 4, async (e) => ({
-      id: e.id, name: e.name ?? "",
-      locations: (await s.pco.list(`/check-ins/v2/events/${e.id}/locations?include=parent&order=position`, 5)).filter((l) => l.kind !== "Folder")
-        .map((l) => ({ id: l.id, name: (l.name ?? "") as string, folder: (l.rel.parent?.name ?? null) as string | null })),
+/**
+ * Service types with their teams, and the Check-Ins events by name. Each event's locations come
+ * separately (eventLocations), only for the events someone picks: reading every event's locations up
+ * front made this take a minute or more at churches with many events.
+ */
+async function setup(s: Session, lazy: boolean): Promise<CheckinSetup> {
+  const teamsOf = () => cached(`setupteams:${s.pcoOrgId}:${s.pcoPersonId}`, 5 * 60_000, async () => {
+    const types = await serviceTypes(s);
+    return mapLimit(types, 6, async (t) => ({
+      id: t.id, name: t.name,
+      teams: (await cached(`teams:${s.pcoPersonId}:${t.id}`, 600_000, () => s.pco.list(`${S}/service_types/${t.id}/teams`, 3)).catch(() => [] as Flat[]))
+        .filter((x) => !x.archived_at && !x.deleted_at).map((x) => ({ id: x.id, name: (x.name ?? "") as string })).sort((a, b) => a.name.localeCompare(b.name)),
     }));
+  });
+  const eventsOf = () => cached(`setupevents:${s.pcoOrgId}:${s.pcoPersonId}`, 5 * 60_000, async () => {
+    const evs = (await s.pco.list(`/check-ins/v2/events?order=name`, 5)).filter((e) => !e.archived_at);
     const vol = (n: string) => (/volunteer|serve|team/i.test(n) ? 0 : 1);
-    events.sort((a, b) => vol(a.name) - vol(b.name) || a.name.localeCompare(b.name));
-  } catch (e) {
-    if (e instanceof HttpError) throw e;
-    eventsError = e instanceof PcoError && (e.status === 401 || e.status === 403) ? "Your Planning Center account can’t read Check-Ins." : "Check-Ins couldn’t be read.";
-  }
-  return { config: await settings(), serviceTypes: withTeams, events, eventsError };
+    return evs.map((e) => ({ id: e.id, name: (e.name ?? "") as string, locations: null })).sort((a, b) => vol(a.name) - vol(b.name) || a.name.localeCompare(b.name));
+  });
+  let eventsError: string | null = null;
+  const [withTeams, events, config] = await Promise.all([
+    teamsOf(),
+    eventsOf().then(async (evs) => lazy ? evs
+      // Pages from before 1.43 expect every event's locations in this answer.
+      : mapLimit(evs, 4, async (e) => ({ ...e, locations: (await eventLocations(s, e.id).catch(() => ({ locations: [] }))).locations }))).catch((e) => {
+      if (e instanceof HttpError) throw e;
+      eventsError = e instanceof PcoError && (e.status === 401 || e.status === 403) ? "Your Planning Center account can’t read Check-Ins." : "Check-Ins couldn’t be read.";
+      return [] as CheckinSetup["events"];
+    }),
+    settings(),
+  ]);
+  return { config, serviceTypes: withTeams, events, eventsError };
+}
+
+/** One Check-Ins event's locations (areas), with their folders. */
+async function eventLocations(s: Session, eventId: string) {
+  if (!/^\w{1,30}$/.test(eventId)) throw new HttpError(400, "Unknown event");
+  return cached(`locs:${s.pcoOrgId}:${s.pcoPersonId}:${eventId}`, 5 * 60_000, async () => {
+    const rows = await s.pco.list(`/check-ins/v2/events/${eventId}/locations?include=parent&order=position`, 5)
+      .catch((e) => { if (e instanceof PcoError && (e.status === 403 || e.status === 404)) throw new HttpError(404, "That event isn’t in Check-Ins any more."); throw e; });
+    return { locations: rows.filter((l) => l.kind !== "Folder").map((l) => ({ id: l.id, name: (l.name ?? "") as string, folder: (l.rel.parent?.name ?? null) as string | null })) };
+  });
 }
 
 const Ref = z.object({ id: z.string().min(1).max(100), name: z.string().max(300) });
@@ -476,16 +534,20 @@ export async function handleCheckin(req: Request, path: string, url: URL): Promi
     if (route === "POST /checkin/signout") { await raw`delete from ops.checkin_sessions where token_hash = ${await sha256(token)}`; return json({ ok: true }); }
     const s = await sessionFrom(token);
     if (route === "GET /checkin/me") return json(meOf(s));
-    if (route === "GET /checkin/services") return json({ services: await upcoming(s) });
+    if (route === "GET /checkin/services") {
+      const day = url.searchParams.get("date");
+      return json({ services: day ? await servicesOn(s, day) : await serviceList(s), today: localDay(new Date().toISOString(), s.timeZone) });
+    }
 
     const loaded = await loadOrg(s.orgId);
     if (!loaded) throw new HttpError(404, "Organization not found");
     const inside = <T>(fn: () => Promise<T>) => inOrg({ id: s.orgId, row: loaded.row, modules: loaded.modules }, fn);
     if (route === "GET /checkin/plan") return json(await inside(() => planData(s, url.searchParams.get("st") ?? "", url.searchParams.get("plan") ?? "")));
     if (route === "POST /checkin/check") { const b = await req.json().catch(() => ({})); return json(await inside(() => check(s, b))); }
-    if (route === "GET /checkin/setup" || route === "PUT /checkin/settings") {
+    if (route === "GET /checkin/setup" || route === "GET /checkin/setup/locations" || route === "PUT /checkin/settings") {
       if (!checkinAtLeast(s.level, "MANAGER")) throw new HttpError(403, "Only people who manage check-ins can change these.");
-      if (route === "GET /checkin/setup") return json(await inside(() => setup(s)));
+      if (route === "GET /checkin/setup") return json(await inside(() => setup(s, url.searchParams.get("lazy") === "1")));
+      if (route === "GET /checkin/setup/locations") return json(await eventLocations(s, url.searchParams.get("event") ?? ""));
       const cfg = ConfigSchema.parse(await req.json().catch(() => ({})));
       return json(await inside(() => saveCheckinSettings(cfg, s.name)));
     }

@@ -53,7 +53,7 @@ export function OrgCheckin() {
         </div>
         <p className="text-xs text-ink-faint">
           {configured.events ? `${configured.events} service type${configured.events === 1 ? "" : "s"} have a volunteer event, ${configured.teamLocations} team area${configured.teamLocations === 1 ? "" : "s"}, ${configured.groups} ministr${configured.groups === 1 ? "y" : "ies"}.` : "No check-in settings yet."}{" "}
-          People who manage check-ins change these on the check-in page (or copy them from the Mac: Preferences → Team Check-ins).
+          People who manage check-ins change these on the check-in page (a Mac running Sundays brings its ministries over by itself: Preferences → Team Check-ins).
         </p>
       </div>
     </Card>

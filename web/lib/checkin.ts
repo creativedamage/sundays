@@ -6,7 +6,7 @@
  * reach the phone.
  */
 import { SUPABASE_URL } from "@shared/cloud";
-import type { CheckinConfig, CheckinMe, CheckinPlanData, CheckinService, CheckinSetup } from "@shared/ops/checkin";
+import type { CheckinConfig, CheckinLocation, CheckinMe, CheckinPlanData, CheckinServices, CheckinSetup } from "@shared/ops/checkin";
 
 const BASE = (process.env.NEXT_PUBLIC_OPS_URL || `${SUPABASE_URL}/functions/v1/ops`).replace(/\/+$/, "");
 const TOKEN = "sundays.checkin.token";
@@ -39,11 +39,14 @@ async function call<T>(method: string, path: string, body?: unknown, auth = true
 
 export const CheckinApi = {
   me: () => call<CheckinMe>("GET", "/checkin/me"),
-  services: () => call<{ services: CheckinService[] }>("GET", "/checkin/services"),
+  /** Last week's and upcoming services, or every service on one day ("YYYY-MM-DD"). */
+  services: (date?: string) => call<CheckinServices>("GET", `/checkin/services${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   plan: (st: string, plan: string) => call<CheckinPlanData>("GET", `/checkin/plan?st=${encodeURIComponent(st)}&plan=${encodeURIComponent(plan)}`),
   check: (st: string, plan: string, personId: string, undo = false) =>
     call<{ ok: true; services?: number; teams?: number; undone?: number }>("POST", "/checkin/check", { st, plan, personId, undo }),
-  setup: () => call<CheckinSetup>("GET", "/checkin/setup"),
+  /** Service types, teams and events by name; each event's areas come from `locations`. */
+  setup: () => call<CheckinSetup>("GET", "/checkin/setup?lazy=1"),
+  locations: (eventId: string) => call<{ locations: CheckinLocation[] }>("GET", `/checkin/setup/locations?event=${encodeURIComponent(eventId)}`),
   saveSettings: (c: CheckinConfig) => call<CheckinConfig>("PUT", "/checkin/settings", c),
   signOut: async () => { await call("POST", "/checkin/signout").catch(() => null); setToken(null); },
 };

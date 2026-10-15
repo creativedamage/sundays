@@ -11,7 +11,6 @@ import type { CheckInLocation, Ministry, MinistryPaging, PagingConfig, ProPresen
 import { Api, ApiError, qk, type PagingPatch } from "@/lib/api";
 import { MINISTRY_LABEL } from "@/lib/paging";
 import { Spinner } from "@/components/ui";
-import { TeamPhonesSettings } from "@/components/settings/TeamPhonesSettings";
 
 function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
@@ -56,7 +55,6 @@ export function PagingSettings() {
       <ProPresenterSection c={c} save={(p) => save.mutate(p)} />
       <MinistriesSection c={c} save={(p) => save.mutate(p)} />
       <IpadSection c={c} save={(p) => save.mutate(p)} />
-      <TeamPhonesSettings />
       <CompanionsSection />
     </>
   );

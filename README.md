@@ -31,7 +31,7 @@ move to `~/Library/Application Support/Sundays` by themselves.
 </tr>
 <tr>
 <td><img src="docs/screenshots/checkins.png" alt="Check-ins"><br><b>Check-ins</b>: who's checked in for a service, by room, refreshing every few seconds.</td>
-<td><img src="docs/screenshots/team-checkins.png" alt="Team check-ins"><br><b>Team check-ins</b>: a tile per team (8/10 in), grouped by ministry, with staff check-in.</td>
+<td><img src="docs/screenshots/team-checkins.png" alt="Team check-ins"><br><b>Team check-ins</b> (on the website): a card per team (8/10 in), grouped by ministry, with staff check-in and printable reports.</td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/modes.png" alt="Full Mode, Service Mode, FOH Companion"><br><b>Modes</b>: Full Mode, Service Mode for a shared computer (PIN to leave it), or FOH Companion.</td>
@@ -43,10 +43,10 @@ move to `~/Library/Application Support/Sundays` by themselves.
 </tr>
 <tr>
 <td><img src="docs/screenshots/micboard.png" alt="Mic board control"><br><b>Stage display control</b>: the board's logo, clock, stage plot, backgrounds and each mic's color and line.</td>
-<td><img src="docs/screenshots/phone-staff.png" alt="Team check-ins on a phone" width="45%"><br><b>On phones</b>: team leads see who's in; staff check people in, from <code>staff.yourchurch.org</code>.</td>
+<td><img src="docs/screenshots/phone-staff.png" alt="Team check-ins on a phone" width="45%"><br><b>On phones</b>: team check-ins at <code>sundays-checkin.vercel.app</code>, signed in with Planning Center.</td>
 </tr>
 <tr>
-<td colspan="2"><img src="docs/screenshots/preferences.png" alt="Preferences" width="60%"><br><b>Preferences</b>: appearance, startup, campuses, Team Check-ins, audio (Allen &amp; Heath, Waves, Smaart), network connections (iPads, phones, companions) and video (clock outputs, ProPresenter).</td>
+<td colspan="2"><img src="docs/screenshots/preferences.png" alt="Preferences" width="60%"><br><b>Preferences</b>: appearance, startup, campuses, Team Check-ins, audio (Allen &amp; Heath, Waves, Smaart), network connections (iPads, companions) and video (clock outputs, ProPresenter).</td>
 </tr>
 </table>
 
@@ -91,7 +91,9 @@ Screenshots use the built-in sample data (Sign in → "Or explore with sample da
 - **Message the team**: on any service, text or email one person, a team, or everyone (by status).
   It opens a message in Messages on this Mac addressed with their mobile numbers from Planning
   Center, like Planning Center's mobile app does (there's no API for sending texts).
-- **Production clock** (sidebar → Clock): a broadcast-style clock (title bar, second timer,
+- **Production clock** (sidebar → Clock): follows **ProPresenter's timers** (the running one as the
+  main timer, a second one as the aux timer; Start, Pause and ± run ProPresenter's own timer), and
+  any saved timer takes over with a click. A broadcast-style clock (title bar, second timer,
   Information box, big main timer) with countdowns, count up, count to a time, time of day, **until
   service** (from Planning Center service times) and **Live item** (time left on the current Planning
   Center Live item). Saved **timers** start with a click, a number key, a schedule, or when the one
@@ -110,13 +112,10 @@ Screenshots use the built-in sample data (Sign in → "Or explore with sample da
   puts people back on the mic they had last time. With Shure receivers on the network, each tile
   shows live battery, runtime, antennas and signal. The connection is read-only: nothing on the
   receivers or in Wireless Workbench is ever changed.
-- **Team check-ins** (sidebar): a tile per team (Safety, Greeters, Production…) showing how many of
-  the people scheduled on a service have checked in with Planning Center Check-Ins, like **8/10**,
-  grouped under ministries you set up (**Ministries** button). Tap a tile for who's in and who
-  isn't, and **Check in** anyone by hand.
-- **Team check-ins on phones**: the same page for phones on the church Wi-Fi. **/leads** for team
-  leads (every team, with names), **/staff** for staff (plus a big Check in button). Each has its
-  own PIN. Friendly addresses like `staff.yourchurch.org` and `leads.yourchurch.org` work too.
+- **Team check-ins** live on the website, **sundays-checkin.vercel.app** (since 1.43; no longer in
+  the Mac app): a card per team (8/10 in) grouped by ministry, check people in by hand, any service
+  date, and a printable report by ministry. Everyone signs in with Planning Center. See
+  [Team check-ins](#team-check-ins).
 - **Check-ins**: a Check-ins tab on every service shows who's checked in (Planning Center
   Check-Ins) for that service, grouped by room, with regulars, guests, volunteers and check-outs.
   It refreshes every 10 seconds and highlights new arrivals.
@@ -518,47 +517,26 @@ can't, the build stops and tells you why. To use a copy you already have:
 `COOL_NDI_LIB="/Library/NDI SDK for Apple/lib/macOS/libndi.dylib" npm run dist:mac`. To build without
 NDI: `COOL_SKIP_NDI=1 npm run dist:mac`. NDI® is a registered trademark of Vizrt NDI AB.
 
-## Volunteer event and areas of serving
+## Team check-ins
 
-Preferences → **Team Check-ins** (the Team check-ins page asks until it's set): for each service
-type, choose the Planning Center Check-Ins **event** volunteers check in to (e.g. "Sunday
-Volunteers"), then give each **team** its **location** in that event (Hospitality → Main Lobby,
-Production → Production Booth). **Match by name** fills in the obvious ones. Press **Save** when
-you're done (Discard puts it back). Only your campus's service types show (your default campus in
-Preferences → Campuses; "Show all campuses" shows the rest), and saving never changes another
-campus's setup.
+Team check-ins are on the website, **sundays-checkin.vercel.app** (add it to a phone's home screen).
+Each person signs in with their own Planning Center account; Operations → Settings → Users gives them
+None, View, Check in or Manage.
 
-- Only check-ins to that event count on Team check-ins (checking your own kids in doesn't count as
-  serving).
-- A staff **Check in** records the person as a **Volunteer** at their team's location, in that event,
-  on every service that day they're on. They show on the service's Check-ins tab in that room, marked
-  "by staff".
-- Tiles show each team's area; anyone who checked in at a different location is flagged.
-- Planning Center's API can't create check-ins, so these stay in Sundays and don't appear in
-  Planning Center's own Check-Ins reports.
-
-## Team check-ins on phones (leads and staff)
-
-Preferences → Network Connections → **Team check-ins on phones**: turn it on and set a PIN for
-**Team leads** and one for **Staff**. Phones on the church Wi-Fi open the address shown there (or scan
-the QR code), enter the PIN once and stay signed in; Share → Add to Home Screen makes it an app.
-
-- **Team leads** (`/leads`): every ministry and team with how many are in (8/10), who's in and who
-  isn't. Filter to one ministry, or search for a name.
-- **Staff** (`/staff`): the same, plus **Check in** next to everyone who isn't in yet. One tap checks
-  that person in on **every service that day** they're scheduled on, on each of their teams (for
-  example the 9:00 and 11:00 plans, or two campuses). Staff can add their name so check-ins show
-  "by Wayne (staff phone)"; a staff check-in can be undone from the same row.
-- The desktop Team check-ins page has the same Check in button.
-- Planning Center's Check-Ins can't be written to by other apps (its API is read-only), so staff
-  check-ins are kept by Sundays on this Mac. They count on every Team check-ins screen, marked
-  "by staff", but don't show in Planning Center's own Check-Ins reports. Scans in Check-Ins count
-  automatically.
-- Phones only get names, photos, positions and check-in times, never contact details. They use the
-  same port as the Kids & Nursery iPads.
-- **Friendly addresses**: enter e.g. `staff.libertychurch.net` and `leads.libertychurch.net`, then
-  set them up like the iPad names below (a DNS A record for each pointing at this Mac's fixed IP, and
-  Port 80). Any address starting with `staff.` or `leads.` works even before it's entered.
+- **Who's in**: a card per team with how many of the people scheduled have checked in (8/10),
+  grouped under ministries. Two or three cards across on a laptop or iPad, one per row on phones.
+  Tap a card for who's in and who isn't, and **Check in** anyone by hand (on every service that day
+  they're on).
+- **Any date**: last week's services are in the list (so Sunday's is still there on Monday), and the
+  calendar button jumps to any date.
+- **Report**: the printer button prints a report grouped by ministry: totals per ministry and team,
+  then who checked in (when, and by whom) and who didn't. This service or the whole day; everyone,
+  only who's missing, or totals only.
+- **Settings** (Manage): each service type's Check-Ins **event** and each team's **area**, and the
+  **ministries**. A Mac running Sundays 1.43 or newer brings its old ministries over by itself
+  (merged: nothing set on the website is changed).
+- Old phone addresses (`/leads`, `/staff`, `staff.…`, `leads.…`) on the church network now go to the
+  website. Kids check-ins by room stay on each service's Check-ins tab in the Mac app, for paging.
 
 ## Friendly iPad addresses (kids.yourchurch.org)
 
